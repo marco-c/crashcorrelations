@@ -36,5 +36,5 @@ def plot(results):
     plt.yticks(index + bar_width, [rule_to_str(item) for item, supportDiff, mySupport, overallSupport in all_rules])
     plt.legend()
 
-    plt.savefig('perf.png')
+    plt.savefig('result.png')
     plt.show()

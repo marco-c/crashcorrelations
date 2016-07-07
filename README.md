@@ -13,3 +13,8 @@ To run the CLI tool locally (useful to find correlations in crashes with a parti
 ```bash
 $PATH_TO_SPARK/bin/spark-submit --master local[*] cli.py [SIGNATURE]
 ```
+
+To run notebooks:
+```bash
+PYSPARK_DRIVER_PYTHON=ipython PYSPARK_DRIVER_PYTHON_OPTS="notebook" $PATH_TO_SPARK/bin/pyspark
+```

@@ -62,7 +62,7 @@ def find_deviations(sc, a, b, min_support_diff, min_corr, max_addons):
 
     dfA = drop_unneeded(augment(a))
     dfA.cache()
-    dfA.show(3)
+    # dfA.show(3)
     total_a = dfA.count()
     dfB = drop_unneeded(augment(b))
     dfB.cache()
@@ -216,7 +216,7 @@ def find_deviations(sc, a, b, min_support_diff, min_corr, max_addons):
         # XXX: Make this a namedtuple or a dict insted of a plain tuple?
         results.append((frozenset(transformed_candidate.items()), support_diff, support_b, support_a))
 
-    len1 = [(item, support_diff, support_b, support_a) for item, support_diff, support_b, support_a in results if len(item) == 1]
+    '''len1 = [(item, support_diff, support_b, support_a) for item, support_diff, support_b, support_a in results if len(item) == 1]
     len2 = [(item, support_diff, support_b, support_a) for item, support_diff, support_b, support_a in results if len(item) == 2]
     others = [(item, support_diff, support_b, support_a) for item, support_diff, support_b, support_a in results if len(item) > 2]
 
@@ -231,7 +231,7 @@ def find_deviations(sc, a, b, min_support_diff, min_corr, max_addons):
     print('\n\n')
 
     for item, support_diff, support_b, support_a in sorted(others, key=lambda v: (-round(v[1], 2), -round(v[2], 2), len(v[0]))):
-        print(str(dict(item)) + ' - ' + str(support_diff) + ' - ' + str(support_b) + ' - ' + str(support_a))
+        print(str(dict(item)) + ' - ' + str(support_diff) + ' - ' + str(support_b) + ' - ' + str(support_a))'''
 
     plot.plot(results)
 
