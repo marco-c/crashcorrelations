@@ -22,18 +22,33 @@ def file_path(day, version):
     return 'data/' + version + '-crashes-' + str(day) + '.json'
 
 
+def read_json(path):
+    data = []
+
+    with open(path, 'r') as f:
+        for line in f:
+            data.append(json.loads(line))
+
+    return data
+
+
+def write_json(path, data):
+    with open(path, 'w') as f:
+        for elem in data:
+            f.write(json.dumps(elem) + '\n')
+
+
 def download_day_crashes(day, version):
     crashes = []
 
     path = file_path(day, version)
 
     try:
-        with open(path, 'r') as f:
-            crashes += json.load(f)
+        crashes += read_json(path)
     except IOError:
         pass
 
-    finished = True
+    finished = False
 
     RESULTS_NUMBER = 1000
 
@@ -110,8 +125,7 @@ def download_day_crashes(day, version):
             finished = True
 
         if len(found) != 0:
-            with open(path, 'w') as f:
-                json.dump(crashes, f)
+            write_json(path, crashes)
 
     return path
 
