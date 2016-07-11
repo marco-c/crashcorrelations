@@ -15,10 +15,6 @@ from pyspark.sql import SQLContext
 import config
 
 
-# LAST_DAY = date.today() # XXX: Should be the last day to avoid issues ("date can't be in the future") in Socorro.
-LAST_DAY = date.today() - timedelta(1)
-
-
 __is_amazon = None
 def is_amazon():
     global __is_amazon
@@ -83,11 +79,9 @@ def download_day_crashes(version, day):
 
     RESULTS_NUMBER = 1000
 
-    while not finished:
-        date_param = ['>=' + str(day)]
-        if day != LAST_DAY:
-            date_param.append('<' + str(day + timedelta(1)))
+    date_param = ['>=' + str(day), '<' + str(day + timedelta(1))]
 
+    while not finished:
         params = {
             'product': 'Firefox',
             'date': date_param,
@@ -132,8 +126,15 @@ def download_day_crashes(version, day):
         r = requests.get(url, params=params, headers=headers)
 
         if r.status_code != 200:
-            print(r.text)
-            raise Exception('Unable to download crash data: ' + r.url)
+            try:
+                error = r.json()['error']
+                if error == 'date can\'t be in the future':
+                    print('reset date')
+                    date_param = ['>=' + str(day)]
+                    continue
+            except:
+                print(r.text)
+                raise Exception(r)
 
         found = r.json()['hits']
 
@@ -171,7 +172,7 @@ def download_crashes(version, days):
     paths = []
 
     for i in range(0, days):
-        paths.append(download_day_crashes(version, LAST_DAY - timedelta(i)))
+        paths.append(download_day_crashes(version, date.today() - timedelta(i)))
 
     return paths
 
