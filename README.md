@@ -11,7 +11,7 @@ token=YOUR_TOKEN_HERE
 
 To run the CLI tool locally (useful to find correlations in crashes with a particular signature):
 ```bash
-$PATH_TO_SPARK/bin/spark-submit --master local[*] cli.py [SIGNATURE]
+$PATH_TO_SPARK/bin/spark-submit --master local[*] cli-signature.py [SIGNATURE]
 ```
 
 To run notebooks:
