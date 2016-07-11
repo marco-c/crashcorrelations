@@ -4,18 +4,49 @@
 
 import os
 import json
-try:
-    from urllib.parse import urlparse
-except ImportError:
-    from urlparse import urlparse
+from urlparse import urlparse
 from datetime import (date, timedelta)
 import requests
+import shutil
+
+import boto3
+from pyspark.sql import SQLContext
 
 import config
 
 
-LAST_DAY = date.today() # XXX: Should be the last day to avoid issues ("date can't be in the future") in Socorro.
-# LAST_DAY = date.today() - timedelta(6)
+# LAST_DAY = date.today() # XXX: Should be the last day to avoid issues ("date can't be in the future") in Socorro.
+LAST_DAY = date.today() - timedelta(1)
+
+
+__is_amazon = None
+def is_amazon():
+    global __is_amazon
+
+    if __is_amazon is None:
+        try:
+            requests.get('http://169.254.169.254/latest/meta-data/ami-id')
+            __is_amazon = True
+        except:
+            __is_amazon = False
+
+    return __is_amazon
+
+
+def delete(path):
+    if is_amazon():
+        s3 = boto3.resource('s3')
+        bucket = s3.Bucket('net-mozaws-prod-us-west-2-pipeline-analysis')
+
+        for key in bucket.objects.filter(Prefix='marco/' + path):
+            key.delete()
+    else:
+        shutil.rmtree(path)
+
+
+def upload(path):
+    s3 = boto3.resource('s3')
+    s3.Bucket('net-mozaws-prod-us-west-2-pipeline-analysis').upload_file(path, 'marco/' + path)
 
 
 def file_path(day, version):
@@ -38,7 +69,7 @@ def write_json(path, data):
             f.write(json.dumps(elem) + '\n')
 
 
-def download_day_crashes(day, version):
+def download_day_crashes(version, day):
     crashes = []
 
     path = file_path(day, version)
@@ -124,10 +155,13 @@ def download_day_crashes(day, version):
         if len(found) < RESULTS_NUMBER:
             finished = True
 
-        if len(found) != 0:
-            write_json(path, crashes)
+    write_json(path, crashes)
 
-    return path
+    if is_amazon():
+        upload(path)
+        return 's3://net-mozaws-prod-us-west-2-pipeline-analysis/marco/' + path
+    else:
+        return path
 
 
 def download_crashes(version, days):
@@ -137,10 +171,11 @@ def download_crashes(version, days):
     paths = []
 
     for i in range(0, days):
-        paths.append(download_day_crashes(LAST_DAY - timedelta(i), version))
+        paths.append(download_day_crashes(version, LAST_DAY - timedelta(i)))
 
     return paths
 
 
-def get_crashes(sqlContext, version, days):
+def get_crashes(sc, version, days):
+    sqlContext = SQLContext(sc)
     return sqlContext.read.format('json').load(download_crashes(version, days))
