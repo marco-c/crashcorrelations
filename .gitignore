@@ -1,4 +1,4 @@
 *.pyc
 config.ini
 .ipynb_checkpoints
-data/
+crashcorrelations_data/
