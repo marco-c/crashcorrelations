@@ -28,7 +28,7 @@ def is_amazon():
 
     if __is_amazon is None:
         try:
-            requests.get('http://169.254.169.254/latest/meta-data/ami-id')
+            requests.get('http://169.254.169.254/latest/meta-data/ami-id', timeout=10)
             __is_amazon = True
         except:
             __is_amazon = False
