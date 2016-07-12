@@ -15,6 +15,12 @@ from pyspark.sql import SQLContext
 import config
 
 
+__token = ''
+def set_token(token):
+    global __token
+    __token = token
+
+
 __is_amazon = None
 def is_amazon():
     global __is_amazon
@@ -134,7 +140,7 @@ def download_day_crashes(version, day):
 
         url = 'https://crash-stats.mozilla.com/api/SuperSearchUnredacted'
         headers = {
-          'Auth-Token': config.get('Socorro', 'token', '')
+          'Auth-Token': config.get('Socorro', 'token', __token),
         }
 
         print(params)
