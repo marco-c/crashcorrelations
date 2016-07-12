@@ -40,16 +40,25 @@ def delete(path):
         shutil.rmtree(path)
 
 
+def download(path):
+    try:
+        boto3.resource('s3').Bucket('net-mozaws-prod-us-west-2-pipeline-analysis').download_file('marco/' + path, path)
+    except:
+        pass
+
+
 def upload(path):
-    s3 = boto3.resource('s3')
-    s3.Bucket('net-mozaws-prod-us-west-2-pipeline-analysis').upload_file(path, 'marco/' + path)
+    boto3.resource('s3').Bucket('net-mozaws-prod-us-west-2-pipeline-analysis').upload_file(path, 'marco/' + path)
 
 
-def file_path(day, version):
-    return 'data/' + version + '-crashes-' + str(day) + '.json'
+def file_path(version, day):
+    return 'crashcorrelations_data/' + version + '-crashes-' + str(day) + '.json'
 
 
 def read_json(path):
+    if is_amazon():
+        download(path)
+
     data = []
 
     with open(path, 'r') as f:
@@ -64,11 +73,17 @@ def write_json(path, data):
         for elem in data:
             f.write(json.dumps(elem) + '\n')
 
+    if is_amazon():
+        upload(path)
+        return 's3://net-mozaws-prod-us-west-2-pipeline-analysis/marco/' + path
+    else:
+        return path
+
 
 def download_day_crashes(version, day):
     crashes = []
 
-    path = file_path(day, version)
+    path = file_path(version, day)
 
     try:
         crashes += read_json(path)
@@ -129,9 +144,10 @@ def download_day_crashes(version, day):
             try:
                 error = r.json()['error']
                 if error == 'date can\'t be in the future':
-                    print('reset date')
                     date_param = ['>=' + str(day)]
                     continue
+                else:
+                    raise Exception()
             except:
                 print(r.text)
                 raise Exception(r)
@@ -156,18 +172,12 @@ def download_day_crashes(version, day):
         if len(found) < RESULTS_NUMBER:
             finished = True
 
-    write_json(path, crashes)
-
-    if is_amazon():
-        upload(path)
-        return 's3://net-mozaws-prod-us-west-2-pipeline-analysis/marco/' + path
-    else:
-        return path
+    return write_json(path, crashes)
 
 
 def download_crashes(version, days):
-    if not os.path.exists('data'):
-        os.mkdir('data')
+    if not os.path.exists('crashcorrelations_data'):
+        os.mkdir('crashcorrelations_data')
 
     paths = []
 
