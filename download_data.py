@@ -10,6 +10,7 @@ import requests
 import shutil
 
 import boto3
+import dateutil.parser
 from pyspark.sql import SQLContext
 
 import config
@@ -37,13 +38,28 @@ def is_amazon():
 
 def delete(path):
     if is_amazon():
-        s3 = boto3.resource('s3')
-        bucket = s3.Bucket('net-mozaws-prod-us-west-2-pipeline-analysis')
+        bucket = boto3.resource('s3').Bucket('net-mozaws-prod-us-west-2-pipeline-analysis')
 
         for key in bucket.objects.filter(Prefix='marco/' + path):
             key.delete()
     else:
         shutil.rmtree(path)
+
+
+def clean_old_data():
+    MAX_AGE = 10
+
+    if is_amazon():
+        bucket = boto3.resource('s3').Bucket('net-mozaws-prod-us-west-2-pipeline-analysis')
+
+        for key in bucket.objects.filter(Prefix='marco/crashcorrelations_data'):
+            if dateutil.parser.parse(key.key[-15:-5]).date() < date.today() - timedelta(MAX_AGE):
+                key.delete()
+    else:
+        for root, dirs, files in os.walk('crashcorrelations_data'):
+            for name in files:
+                if dateutil.parser.parse(name[-15:-5]).date() < date.today() - timedelta(MAX_AGE):
+                    os.remove(os.path.join('crashcorrelations_data', name))
 
 
 def download(path):
@@ -184,6 +200,8 @@ def download_day_crashes(version, day):
 def download_crashes(version, days):
     if not os.path.exists('crashcorrelations_data'):
         os.mkdir('crashcorrelations_data')
+
+    clean_old_data()
 
     paths = []
 
