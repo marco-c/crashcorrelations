@@ -169,7 +169,7 @@ def download_day_crashes(version, day):
                     date_param = ['>=' + str(day)]
                     continue
                 else:
-                    raise Exception()
+                    raise Exception(r)
             except:
                 print(r.text)
                 raise Exception(r)
@@ -214,3 +214,36 @@ def download_crashes(version, days):
 def get_crashes(sc, version, days):
     sqlContext = SQLContext(sc)
     return sqlContext.read.format('json').load(download_crashes(version, days))
+
+
+def get_top_50(version, days):
+    url = 'https://crash-stats.mozilla.com/api/SuperSearch'
+    headers = {
+      'Auth-Token': config.get('Socorro', 'token', __token),
+    }
+
+    params = {
+        'product': 'Firefox',
+        'date': ['>=' + str(date.today() - timedelta(days)), '<' + str(date.today())],
+        'version': version,
+        '_results_number': 0,
+    }
+
+    r = requests.get(url, params=params, headers=headers)
+
+    if r.status_code != 200:
+        try:
+            error = r.json()['error']
+            if error == 'date can\'t be in the future':
+                params['date'] = ['>=' + str(date.today() - timedelta(days) - timedelta(1)), '<' + str(date.today() - timedelta(1))]
+            else:
+                raise Exception(r)
+        except:
+            print(r.text)
+            raise Exception(r)
+
+    if r.status_code != 200:
+        print(r.text)
+        raise Exception(r)
+
+    return [signature['term'] for signature in r.json()['facets']['signature']]
