@@ -237,6 +237,6 @@ def find_deviations(sc, a, b, min_support_diff, min_corr, max_addons):
     for item, support_diff, support_b, support_a in sorted(others, key=lambda v: (-round(v[1], 2), -round(v[2], 2), len(v[0]))):
         print(str(dict(item)) + ' - ' + str(support_diff) + ' - ' + str(support_b) + ' - ' + str(support_a))'''
 
-    plot.plot(results)
-
     sc.stop()
+
+    return results
