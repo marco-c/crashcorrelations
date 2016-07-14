@@ -165,11 +165,13 @@ def find_deviations(sc, a, b, min_support_diff, min_corr, max_addons):
 
         candidates[1].append(elem)
 
-    l = 1
+    l = 2
+
+    '''l = 1
     while len(candidates[l]) > 0:
         print(str(l) + ' CANDIDATES: ' + str(len(candidates[l])))
         l += 1
-        candidates[l] = generate_candidates(dfA, dfB, candidates[l - 1])
+        candidates[l] = generate_candidates(dfA, dfB, candidates[l - 1])'''
 
     all_candidates = sum([candidates[i] for i in range(1,l)], [])
     count_candidates(dfA, all_candidates)
