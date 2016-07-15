@@ -8,6 +8,7 @@ from pyspark import SparkContext
 
 import download_data
 import crash_deviations
+import plot
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Versions Correlations')
@@ -21,6 +22,6 @@ if __name__ == "__main__":
     df_a = download_data.get_crashes(sc, version=args.reference_version, days=2)
     df_b = download_data.get_crashes(sc, version=args.version, days=2)
 
-    results = crash_deviations.find_deviations(sc, df_a, df_b, min_support_diff=0.01, min_corr=0.06, max_addons=50)
+    results = crash_deviations.find_deviations(sc, df_a, df_b, min_support_diff=0.03, min_corr=0.06, max_addons=50)
 
-    plot.plot(results)
+    plot.plot(results, args.reference_version, args.version)
