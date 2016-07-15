@@ -28,7 +28,7 @@ def find_deviations(sc, a, b, min_support_diff, min_corr, max_addons):
     for i in range(0, len(all_addons_versions), 2):
         all_addons.append(all_addons_versions[i].asDict()['addon'])
 
-    print(len(all_addons))
+    # print(len(all_addons))
 
     all_addons_counts = defaultdict(int)
     for addon in all_addons:
@@ -37,7 +37,7 @@ def find_deviations(sc, a, b, min_support_diff, min_corr, max_addons):
     # Too many addons, restrict to the top max_addons.
     all_addons = [k for k, v in sorted(all_addons_counts.items(), key=lambda (k, v): v, reverse=True)[:max_addons]]
 
-    print(all_addons)
+    # print(all_addons)
 
     # Aliases for the addons (otherwise Spark fails because it can't find the columns associated to addons, probably because they contain special characters).
     # TODO: Use https://services.addons.mozilla.org/en-US/firefox/api/1.4/search/guid:GUID to get the names.
@@ -75,7 +75,7 @@ def find_deviations(sc, a, b, min_support_diff, min_corr, max_addons):
     dfB.cache()
     total_b = dfB.count()
 
-    dfA.printSchema()
+    # dfA.printSchema()
 
     saved_counts_a = {}
     saved_counts_b = {}
@@ -247,7 +247,5 @@ def find_deviations(sc, a, b, min_support_diff, min_corr, max_addons):
 
     for result in sorted(others, key=lambda v: (-round(v['support_diff'], 2), -round(v['support_a'], 2), len(v[0]))):
         print(str(result['item']) + ' - ' + str(result['support_diff']) + ' - ' + str(result['support_b']) + ' - ' + str(result['support_a']))'''
-
-    sc.stop()
 
     return results
