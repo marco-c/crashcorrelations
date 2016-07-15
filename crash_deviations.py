@@ -8,11 +8,18 @@ from collections import defaultdict
 import scipy.stats
 import math
 
-from pyspark.sql import Row, functions
+from pyspark.sql import functions
+from pyspark.sql import SQLContext
 
-import plot
+import download_data
+
 
 MIN_COUNT = 5 # 5 for chi-squared test.
+
+
+def get_crashes(sc, version, days):
+    return SQLContext(sc).read.format('json').load(download_data.get_paths(version, days))
+
 
 def find_deviations(sc, a, b, min_support_diff, min_corr, max_addons):
     # XXX: Also consider addons in the A group? a.select(functions.explode(a['addons']).alias('addon')).collect() +

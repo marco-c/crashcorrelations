@@ -10,8 +10,8 @@ import requests
 import shutil
 
 import boto3
+import botocore
 import dateutil.parser
-from pyspark.sql import SQLContext
 
 import config
 
@@ -73,8 +73,32 @@ def upload(path):
     boto3.resource('s3').Bucket('net-mozaws-prod-us-west-2-pipeline-analysis').upload_file(path, 'marco/' + path)
 
 
+def exists(path):
+    if is_amazon():
+        try:
+            boto3.resource('s3').Object('net-mozaws-prod-us-west-2-pipeline-analysis', 'marco/' + path).load()
+        except botocore.exceptions.ClientError as e:
+            if e.response['Error']['Code'] == '404':
+                return False
+            else:
+                raise e
+        else:
+            return True
+    else:
+        return os.path.isfile(path)
+
+
 def file_path(version, day):
     return 'crashcorrelations_data/' + version + '-crashes-' + str(day) + '.json'
+
+
+def get_path(version, day):
+    path = file_path(version, day)
+
+    if is_amazon():
+        return 's3://net-mozaws-prod-us-west-2-pipeline-analysis/marco/' + path
+    else:
+        return path
 
 
 def read_json(path):
@@ -97,9 +121,6 @@ def write_json(path, data):
 
     if is_amazon():
         upload(path)
-        return 's3://net-mozaws-prod-us-west-2-pipeline-analysis/marco/' + path
-    else:
-        return path
 
 
 def download_day_crashes(version, day):
@@ -194,7 +215,7 @@ def download_day_crashes(version, day):
         if len(found) < RESULTS_NUMBER:
             finished = True
 
-    return write_json(path, crashes)
+    write_json(path, crashes)
 
 
 def download_crashes(version, days):
@@ -203,17 +224,17 @@ def download_crashes(version, days):
 
     clean_old_data()
 
-    paths = []
-
     for i in range(0, days):
-        paths.append(download_day_crashes(version, date.today() - timedelta(i)))
-
-    return paths
+        download_day_crashes(version, date.today() - timedelta(i))
 
 
-def get_crashes(sc, version, days):
-    sqlContext = SQLContext(sc)
-    return sqlContext.read.format('json').load(download_crashes(version, days))
+def get_paths(version, days):
+    last_day = date.today()
+    path = get_path(version, last_day)
+    if not exists(path):
+        last_day -= timedelta(1)
+
+    return [get_path(version, last_day - timedelta(i)) for i in range(0, days)]
 
 
 def get_top_50(version, days):
