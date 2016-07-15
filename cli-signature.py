@@ -20,7 +20,7 @@ if __name__ == "__main__":
     sc = SparkContext(appName='CrashCorrelations')
 
     df_a = download_data.get_crashes(sc, version=args.version, days=2)
-    df_b = df_a.filter(df_a['signature'].startswith('npmcffplg32.dll'))
+    df_b = df_a.filter(df_a['signature'] == args.signature)
 
     results = crash_deviations.find_deviations(sc, df_a, df_b, min_support_diff=0.15, min_corr=0.03, max_addons=50)
 

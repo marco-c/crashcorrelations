@@ -217,25 +217,29 @@ def find_deviations(sc, a, b, min_support_diff, min_corr, max_addons):
                 transformed_candidate[reverse_addons_map[key]] = val
                 del transformed_candidate[key]
 
-        # XXX: Make this a namedtuple or a dict insted of a plain tuple?
-        results.append((frozenset(transformed_candidate.items()), support_diff, support_b, support_a))
+        results.append({
+            'item': transformed_candidate,
+            'support_diff': support_diff,
+            'support_a': support_a,
+            'support_b': support_b,
+        })
 
-    '''len1 = [(item, support_diff, support_b, support_a) for item, support_diff, support_b, support_a in results if len(item) == 1]
-    len2 = [(item, support_diff, support_b, support_a) for item, support_diff, support_b, support_a in results if len(item) == 2]
-    others = [(item, support_diff, support_b, support_a) for item, support_diff, support_b, support_a in results if len(item) > 2]
+    '''len1 = [result for result in results if len(result['item']) == 1]
+    len2 = [result for result in results if len(result['item']) == 2]
+    others = [result for result in results if len(result['item']) > 2]
 
-    for item, support_diff, support_b, support_a in sorted(len1, key=lambda v: (-round(v[1], 2), -round(v[2], 2))):
-        print(str(dict(item)) + ' - ' + str(support_diff) + ' - ' + str(support_b) + ' - ' + str(support_a))
+    for result in sorted(len1, key=lambda v: (-round(v['support_diff'], 2), -round(v['support_a'], 2))):
+        print(str(result['item']) + ' - ' + str(result['support_diff']) + ' - ' + str(result['support_b']) + ' - ' + str(result['support_a']))
 
     print('\n\n')
 
-    for item, support_diff, support_b, support_a in sorted(len2, key=lambda v: (-round(v[1], 2), -round(v[2], 2))):
-        print(str(dict(item)) + ' - ' + str(support_diff) + ' - ' + str(support_b) + ' - ' + str(support_a))
+    for result in sorted(len2, key=lambda v: (-round(v['support_diff'], 2), -round(v['support_a'], 2))):
+        print(str(result['item']) + ' - ' + str(result['support_diff']) + ' - ' + str(result['support_b']) + ' - ' + str(result['support_a']))
 
     print('\n\n')
 
-    for item, support_diff, support_b, support_a in sorted(others, key=lambda v: (-round(v[1], 2), -round(v[2], 2), len(v[0]))):
-        print(str(dict(item)) + ' - ' + str(support_diff) + ' - ' + str(support_b) + ' - ' + str(support_a))'''
+    for result in sorted(others, key=lambda v: (-round(v['support_diff'], 2), -round(v['support_a'], 2), len(v[0]))):
+        print(str(result['item']) + ' - ' + str(result['support_diff']) + ' - ' + str(result['support_b']) + ' - ' + str(result['support_a']))'''
 
     sc.stop()
 
