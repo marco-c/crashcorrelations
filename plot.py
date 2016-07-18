@@ -16,6 +16,9 @@ def rule_to_str(rule):
 
 
 def plot(results, label_a, label_b, outputFile=None):
+    if len(results) == 0:
+        return
+
     all_rules = sorted(results, key=lambda v: (-len(v['item']), round(v['support_diff'], 2), round(v['support_a'], 2)))
 
     # TODO: Print all rules once we have good heuristics to prune rules longer than 1.
@@ -39,4 +42,5 @@ def plot(results, label_a, label_b, outputFile=None):
 
     if outputFile is not None:
         plt.savefig(outputFile)
-    plt.show()
+    else:
+        plt.show()
