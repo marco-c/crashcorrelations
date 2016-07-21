@@ -47,11 +47,13 @@ def find_deviations(sc, a, b, min_support_diff, min_corr, max_addons):
         addons_map[all_addons[i]] = 'a' + str(i)
         reverse_addons_map['a' + str(i)] = all_addons[i]
 
+
     def augment(df):
         df = df.select(['*'] + [functions.array_contains(df['addons'], addon).alias(addons_map[addon]) for addon in all_addons])
 
         return df.withColumn('startup', df['uptime'] < 60)\
                  .withColumn('plugin', df['plugin_version'].isNotNull())
+
 
     def drop_unneeded(df):
         return df.drop('signature')\
@@ -67,12 +69,10 @@ def find_deviations(sc, a, b, min_support_diff, min_corr, max_addons):
                  .drop('cpu_arch')\
                  .drop('cpu_name')
 
-    dfA = drop_unneeded(augment(a))
-    dfA.cache()
+    dfA = drop_unneeded(augment(a)).cache()
     # dfA.show(3)
     total_a = dfA.count()
-    dfB = drop_unneeded(augment(b))
-    dfB.cache()
+    dfB = drop_unneeded(augment(b)).cache()
     total_b = dfB.count()
 
     # dfA.printSchema()
