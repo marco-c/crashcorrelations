@@ -226,26 +226,27 @@ def find_deviations(sc, a, b, min_support_diff, min_corr, max_addons):
 
         results.append({
             'item': transformed_candidate,
-            'support_diff': support_diff,
             'support_a': support_a,
             'support_b': support_b,
         })
+
 
     '''len1 = [result for result in results if len(result['item']) == 1]
     len2 = [result for result in results if len(result['item']) == 2]
     others = [result for result in results if len(result['item']) > 2]
 
-    for result in sorted(len1, key=lambda v: (-round(v['support_diff'], 2), -round(v['support_a'], 2))):
+    for result in sorted(len1, key=lambda v: (-abs(v['support_a'] - v['support_b']))):
         print(str(result['item']) + ' - ' + str(result['support_diff']) + ' - ' + str(result['support_b']) + ' - ' + str(result['support_a']))
 
     print('\n\n')
 
-    for result in sorted(len2, key=lambda v: (-round(v['support_diff'], 2), -round(v['support_a'], 2))):
+    for result in sorted(len2, key=lambda v: (-abs(v['support_a'] - v['support_b']))):
         print(str(result['item']) + ' - ' + str(result['support_diff']) + ' - ' + str(result['support_b']) + ' - ' + str(result['support_a']))
 
     print('\n\n')
 
-    for result in sorted(others, key=lambda v: (-round(v['support_diff'], 2), -round(v['support_a'], 2), len(v[0]))):
+    for result in sorted(others, key=lambda v: (-round(abs(v['support_a'] - v['support_b']), 2), len(v['item']))):
         print(str(result['item']) + ' - ' + str(result['support_diff']) + ' - ' + str(result['support_b']) + ' - ' + str(result['support_a']))'''
+
 
     return results
