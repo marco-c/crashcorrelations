@@ -99,26 +99,47 @@ def find_deviations(sc, a, b, min_support_diff, min_corr, max_addons):
 
 
     def should_prune(parent1, parent2, candidate):
+        count_a = get_count(candidate, dfA)
+        support_a = count_a / total_a
         count_b = get_count(candidate, dfB)
+        support_b = count_b / total_b
+
+        if count_a < MIN_COUNT:
+            return True
 
         if count_b < MIN_COUNT:
             return True
 
-        if count_b / total_b < min_support_diff:
+        if count_a / total_a < min_support_diff and count_b / total_b < min_support_diff:
             return True
 
-        if parent1 is not None:
-            parent_count_b = get_count(parent1, dfB)
+        if parent1 is None or parent2 is None:
+            return False
 
-            # If there's no large change in the support of a set when extending the set, prune the node.
-            if abs(parent_count_b / total_b - count_b / total_b) < min(0.01, min_support_diff / 2):
-                return True
+        parent1_count_a = get_count(parent1, dfA)
+        parent1_support_a = parent1_count_a / total_a
+        parent1_count_b = get_count(parent1, dfB)
+        parent1_support_b = parent1_count_b / total_b
+        parent2_count_a = get_count(parent2, dfA)
+        parent2_support_a = parent2_count_a / total_a
+        parent2_count_b = get_count(parent2, dfB)
+        parent2_support_b = parent2_count_b / total_b
 
-            # If there's no significative change, prune the node.
-            if parent_count_b != total_b or count_b != total_b:
-                chi2, p_b, dof, expected = scipy.stats.chi2_contingency([[parent_count_b, count_b], [total_b - parent_count_b, total_b - count_b]])
-                if p_b > 0.05:
-                    return True
+        # TODO: Add fixed relations pruning.
+
+        # If there's no large change in the support of a set when extending the set, prune the node.
+        threshold = min(0.01, min_support_diff / 2)
+        if (abs(parent1_support_a - support_a) < threshold and abs(parent1_support_b - support_b) < threshold) and\
+           (abs(parent2_support_a - support_a) < threshold and abs(parent2_support_b - support_b) < threshold):
+            return True
+
+        # If there's no significative change, prune the node.
+        chi2, p1_a = scipy.stats.chisquare([parent1_count_a, count_a])
+        chi2, p2_a = scipy.stats.chisquare([parent2_count_a, count_a])
+        chi2, p1_b = scipy.stats.chisquare([parent1_count_b, count_b])
+        chi2, p2_b = scipy.stats.chisquare([parent2_count_b, count_b])
+        if p1_a > 0.05 and p2_a > 0.05 and p1_b > 0.05 and p2_b > 0.05:
+            return True
 
         return False
 
@@ -146,6 +167,7 @@ def find_deviations(sc, a, b, min_support_diff, min_corr, max_addons):
                     candidates.add(props)
                     parents[props] = (previous_candidates[i], previous_candidates[j])
 
+        results_a = count_candidates(dfA, candidates)
         results_b = count_candidates(dfB, candidates)
 
         return [result for result in results_b if not should_prune(parents[result][0], parents[result][1], result)]
@@ -160,6 +182,7 @@ def find_deviations(sc, a, b, min_support_diff, min_corr, max_addons):
     results_b = dfB.rdd.flatMap(lambda p: [(frozenset([(key,p[key])]), 1) for key in broadcastVar.value]).reduceByKey(lambda x, y: x + y).collect()
     for count in results_b:
         save_count(count[0], count[1], dfB)
+    results_a = count_candidates(dfA, [count[0] for count in results_b])
 
     # Filter first level candidates.
     candidates_tmp = set([count[0] for count in results_b if not should_prune(None, None, count[0])])
@@ -181,7 +204,6 @@ def find_deviations(sc, a, b, min_support_diff, min_corr, max_addons):
         candidates[l] = generate_candidates(dfA, dfB, candidates[l - 1])'''
 
     all_candidates = sum([candidates[i] for i in range(1,l)], [])
-    count_candidates(dfA, all_candidates)
 
     alpha = 0.05
     alpha_k = alpha
