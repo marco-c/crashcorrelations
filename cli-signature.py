@@ -21,7 +21,7 @@ if __name__ == "__main__":
 
     download_data.download_crashes(args.version, 2)
 
-    df_a = crash_deviations.get_crashes(sc, version=args.version, days=2)
+    df_a = crash_deviations.get_crashes(sc, version=args.version, days=5)
     df_b = df_a.filter(df_a['signature'] == args.signature)
 
     results = crash_deviations.find_deviations(sc, df_a, df_b, min_support_diff=0.15, min_corr=0.03, max_addons=50)
