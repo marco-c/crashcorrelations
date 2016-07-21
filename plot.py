@@ -19,10 +19,7 @@ def plot(results, label_a, label_b, outputFile=None):
     if len(results) == 0:
         return
 
-    all_rules = sorted(results, key=lambda v: (-len(v['item']), round(v['support_diff'], 2), round(v['support_a'], 2)))
-
-    # TODO: Print all rules once we have good heuristics to prune rules longer than 1.
-    all_rules = [rule for rule in all_rules if len(rule['item']) == 1]
+    all_rules = sorted(results, key=lambda v: (-len(v['item']), round(abs(v['support_a'] - v['support_b']), 2), round(v['support_a'], 2)))
 
     values_a = [100 * rule['support_a'] for rule in all_rules]
     values_b = [100 * rule['support_b'] for rule in all_rules]
