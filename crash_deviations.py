@@ -113,7 +113,7 @@ def find_deviations(sc, a, b, min_support_diff, min_corr, max_addons):
         if count_b < MIN_COUNT:
             return True
 
-        if count_a / total_a < min_support_diff and count_b / total_b < min_support_diff:
+        if support_a < min_support_diff and support_b < min_support_diff:
             return True
 
         if parent1 is None or parent2 is None:
@@ -170,6 +170,8 @@ def find_deviations(sc, a, b, min_support_diff, min_corr, max_addons):
                     candidates.add(props)
                     parents[props] = (previous_candidates[i], previous_candidates[j])
 
+        print(str(len(previous_candidates[0]) + 1) + ' CANDIDATES: ' + str(len(candidates)))
+
         results_a = count_candidates(dfA, candidates)
         results_b = count_candidates(dfB, candidates)
 
@@ -182,10 +184,12 @@ def find_deviations(sc, a, b, min_support_diff, min_corr, max_addons):
 
     # Generate first level candidates.
     broadcastVar = sc.broadcast(dfB.columns)
+    results_a = dfA.rdd.flatMap(lambda p: [(frozenset([(key,p[key])]), 1) for key in broadcastVar.value]).reduceByKey(lambda x, y: x + y).collect()
     results_b = dfB.rdd.flatMap(lambda p: [(frozenset([(key,p[key])]), 1) for key in broadcastVar.value]).reduceByKey(lambda x, y: x + y).collect()
+    for count in results_a:
+        save_count(count[0], count[1], dfA)
     for count in results_b:
         save_count(count[0], count[1], dfB)
-    results_a = count_candidates(dfA, [count[0] for count in results_b])
 
     # Filter first level candidates.
     candidates_tmp = set([count[0] for count in results_b if not should_prune(None, None, count[0])])
@@ -201,6 +205,8 @@ def find_deviations(sc, a, b, min_support_diff, min_corr, max_addons):
 
         candidates[1].append(elem)
 
+    print('1 RULES: ' + str(len(candidates[1])))
+
     # Filter reference dataset using the candidates that have support == 100%.
     prior_candidates = [c for c in candidates[1] if get_count(c, dfB) == total_b]
     candidates[1] = [c for c in candidates[1] if get_count(c, dfB) != total_b]
@@ -211,14 +217,14 @@ def find_deviations(sc, a, b, min_support_diff, min_corr, max_addons):
 
         total_a = dfA.count()
 
-        results_a = count_candidates(dfA, candidates[1])
+        # Recalculate counts given the rules in prior_candidates are true.
+        count_candidates(dfA, candidates[1])
 
     l = 1
-    print('1 CANDIDATES: ' + str(len(candidates[1])))
     while len(candidates[l]) > 0 and l < 2:
         l += 1
         candidates[l] = generate_candidates(dfA, dfB, candidates[l - 1])
-        print(str(l) + ' CANDIDATES: ' + str(len(candidates[l])))
+        print(str(l) + ' RULES: ' + str(len(candidates[l])))
 
     all_candidates = prior_candidates + sum([candidates[i] for i in range(1,l+1)], [])
 
