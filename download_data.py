@@ -89,12 +89,12 @@ def exists(path):
         return os.path.isfile(path)
 
 
-def file_path(version, day):
-    return 'crashcorrelations_data/' + version + '-crashes-' + str(day) + '.json'
+def file_path(version, day, product):
+    return 'crashcorrelations_data/' + product.lower() + '-' + version + '-crashes-' + str(day) + '.json'
 
 
-def get_path(version, day):
-    path = file_path(version, day)
+def get_path(version, day, product):
+    path = file_path(version, day, product)
 
     if is_amazon():
         return 's3://net-mozaws-prod-us-west-2-pipeline-analysis/marco/' + path
@@ -124,10 +124,10 @@ def write_json(path, data):
         upload(path)
 
 
-def download_day_crashes(version, day):
+def download_day_crashes(version, day, product='Firefox'):
     crashes = []
 
-    path = file_path(version, day)
+    path = file_path(version, day, product)
 
     try:
         crashes += read_json(path)
@@ -142,7 +142,7 @@ def download_day_crashes(version, day):
 
     while not finished:
         params = {
-            'product': 'Firefox',
+            'product': product,
             'date': date_param,
             'version': version,
             '_columns': [
@@ -219,7 +219,7 @@ def download_day_crashes(version, day):
     write_json(path, crashes)
 
 
-def download_crashes(versions, days):
+def download_crashes(versions, days, product='Firefox'):
     if not os.path.exists('crashcorrelations_data'):
         os.mkdir('crashcorrelations_data')
 
@@ -227,23 +227,23 @@ def download_crashes(versions, days):
 
     for i in range(0, days):
         for version in versions:
-            download_day_crashes(version, date.today() - timedelta(i))
+            download_day_crashes(version, date.today() - timedelta(i), product)
 
 
-def get_paths(versions, days):
+def get_paths(versions, days, product='Firefox'):
     last_day = date.today()
-    path = get_path(versions[0], last_day)
+    path = get_path(versions[0], last_day, product)
     if not exists(path):
         last_day -= timedelta(1)
 
-    return [get_path(version, last_day - timedelta(i)) for i in range(0, days) for version in versions]
+    return [get_path(version, last_day - timedelta(i), product) for i in range(0, days) for version in versions]
 
 
-def get_top_50(versions, days):
+def get_top_50(versions, days, product='Firefox'):
     url = 'https://crash-stats.mozilla.com/api/SuperSearch'
 
     params = {
-        'product': 'Firefox',
+        'product': product,
         'date': ['>=' + str(date.today() - timedelta(days)), '<' + str(date.today())],
         'version': versions,
         '_results_number': 0,

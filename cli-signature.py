@@ -13,6 +13,7 @@ import plot
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Signature Correlations')
     parser.add_argument('signature', action='store', help='The signature you\'re interested in.')
+    parser.add_argument('-p', '--product', action='store', default='Firefox', help='The product you\'re interested in.')
 
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument('-v', '--versions', action='store', nargs='+', help='The versions you\'re interested in.')
@@ -27,9 +28,9 @@ if __name__ == "__main__":
 
     sc = SparkContext(appName='CrashCorrelations')
 
-    download_data.download_crashes(versions=versions, days=5)
+    download_data.download_crashes(versions=versions, days=5, product=args.product)
 
-    df_a = crash_deviations.get_crashes(sc, versions=versions, days=5)
+    df_a = crash_deviations.get_crashes(sc, versions=versions, days=5, product=args.product)
     df_b = df_a.filter(df_a['signature'] == args.signature)
 
     results = crash_deviations.find_deviations(sc, df_a, df_b, min_support_diff=0.15, min_corr=0.03, max_addons=50)

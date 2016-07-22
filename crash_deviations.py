@@ -18,8 +18,8 @@ import addons
 MIN_COUNT = 5 # 5 for chi-squared test.
 
 
-def get_crashes(sc, versions, days):
-    return SQLContext(sc).read.format('json').load(download_data.get_paths(versions, days))
+def get_crashes(sc, versions, days, product):
+    return SQLContext(sc).read.format('json').load(download_data.get_paths(versions, days, product))
 
 
 def find_deviations(sc, a, b, min_support_diff, min_corr, max_addons):
