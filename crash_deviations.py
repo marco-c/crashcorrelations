@@ -248,12 +248,10 @@ def find_deviations(sc, a, b, min_support_diff, min_corr, max_addons):
 
         # Discard element if the support is almost the same as if the variables were independent.
         if len(candidate) != 1:
-            independent_support = reduce(operator.mul, [get_count(frozenset([item]), dfB) / total_b for item in candidate])
-            if (independent_support == 1.0 and support_b == 1.0) or (independent_support != 1.0 and support_b - 0.05 <= independent_support <= support_b + 0.05):
-                # print('SKIP ' + str(candidate) + ' BECAUSE ALMOST INDEPENDENT (' + str(independent_support) + ', ' + str(support_b) + ')')
+            independent_support_a = reduce(operator.mul, [get_count(frozenset([item]), dfA) / tot_a for item in candidate])
+            independent_support_b = reduce(operator.mul, [get_count(frozenset([item]), dfB) / total_b for item in candidate])
+            if abs(independent_support_a - support_a) <= max(0.01, 0.1 * support_a) and abs(independent_support_b - support_b) <= max(0.01, 0.1 * support_b):
                 continue
-            # else:
-                # print('DONTSKIP ' + str(candidate) + ' BECAUSE ALMOST INDEPENDENT (' + str(independent_support) + ', ' + str(support_b) + ')')
 
         transformed_candidate = dict(candidate)
         for key, val in candidate:
