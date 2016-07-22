@@ -151,10 +151,11 @@ def find_deviations(sc, a, b, min_support_diff, min_corr, max_addons):
         broadcastVar = sc.broadcast(candidates)
         results = df.rdd.flatMap(lambda p: [(fset, 1) for fset in broadcastVar.value if all(p[key] == value for key, value in fset)]).reduceByKey(lambda x, y: x + y).collect()
 
+        # Initialize all results to 0.
+        for candidate in candidates:
+            save_count(candidate, 0, df)
         for result in results:
             save_count(result[0], result[1], df)
-        for candidate in [candidate for candidate in candidates if candidate not in [result[0] for result in results]]:
-            save_count(candidate, 0, df)
 
         return [result[0] for result in results]
 
