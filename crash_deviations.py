@@ -186,11 +186,14 @@ def find_deviations(sc, a, b, min_support_diff, min_corr, max_addons):
 
     # Filter first level candidates.
     candidates_tmp = set([count[0] for count in results_b if not should_prune(None, None, count[0])])
-    # Remove useless rules (e.g. addon_X=True and addon_X=False).
+    # Remove useless rules (e.g. addon_X=True and addon_X=False or is_garbage_collecting=1 and is_garbage_collecting=None).
     for elem in candidates_tmp:
         elem_key, elem_val = [(key, val) for key, val in elem][0]
 
         if elem_val == False and frozenset([(elem_key, True)]) in candidates_tmp:
+            continue
+
+        if elem_val == None and frozenset([(elem_key, u'1')]) in candidates_tmp:
             continue
 
         candidates[1].append(elem)
