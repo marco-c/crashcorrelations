@@ -72,6 +72,7 @@ def find_deviations(sc, a, b, min_support_diff, min_corr, max_addons):
     dfA = drop_unneeded(augment(a)).cache()
     # dfA.show(3)
     total_a = dfA.count()
+    orig_total_a = total_a
     dfB = drop_unneeded(augment(b)).cache()
     total_b = dfB.count()
 
@@ -198,6 +199,18 @@ def find_deviations(sc, a, b, min_support_diff, min_corr, max_addons):
 
         candidates[1].append(elem)
 
+    # Filter reference dataset using the candidates that have support == 100%.
+    prior_candidates = [c for c in candidates[1] if get_count(c, dfB) == total_b]
+    candidates[1] = [c for c in candidates[1] if get_count(c, dfB) != total_b]
+    if len(prior_candidates) > 0:
+        condition = reduce(operator.__and__, [dfA[key] == value if value is not None else dfA[key].isNull() for c in prior_candidates for key, value in c])
+        print(condition)
+        dfA = dfA.filter(condition).cache()
+
+        total_a = dfA.count()
+
+        results_a = count_candidates(dfA, candidates[1])
+
     l = 1
     print('1 CANDIDATES: ' + str(len(candidates[1])))
     while len(candidates[l]) > 0 and l < 2:
@@ -205,7 +218,7 @@ def find_deviations(sc, a, b, min_support_diff, min_corr, max_addons):
         candidates[l] = generate_candidates(dfA, dfB, candidates[l - 1])
         print(str(l) + ' CANDIDATES: ' + str(len(candidates[l])))
 
-    all_candidates = sum([candidates[i] for i in range(1,l)], [])
+    all_candidates = prior_candidates + sum([candidates[i] for i in range(1,l+1)], [])
 
     alpha = 0.05
     alpha_k = alpha
@@ -213,7 +226,8 @@ def find_deviations(sc, a, b, min_support_diff, min_corr, max_addons):
     for candidate in all_candidates:
         count_a = get_count(candidate, dfA)
         count_b = get_count(candidate, dfB)
-        support_a = count_a / total_a
+        tot_a = total_a if candidate not in prior_candidates else orig_total_a
+        support_a = count_a / tot_a
         support_b = count_b / total_b
 
         # Discard element if the support in the subset is not different enough from the support in the entire dataset.
@@ -222,14 +236,13 @@ def find_deviations(sc, a, b, min_support_diff, min_corr, max_addons):
             continue
 
         # Discard element if it is not significative.
-        chi2, p, dof, expected = scipy.stats.chi2_contingency([[count_b, count_a], [total_b - count_b, total_a - count_a]])
-        #oddsration, p = scipy.stats.fisher_exact([[count_b, count_a], [total_b - count_b, total_a - count_a]])
+        chi2, p, dof, expected = scipy.stats.chi2_contingency([[count_b, count_a], [total_b - count_b, tot_a - count_a]])
+        #oddsration, p = scipy.stats.fisher_exact([[count_b, count_a], [total_b - count_b, tot_a - count_a]])
         alpha_k = min((alpha / pow(2, len(candidate))) / len(candidates[len(candidate)]), alpha_k)
         if p > alpha_k:
             continue
 
-        #if len(candidate) != 1:
-        phi = math.sqrt(chi2 / (total_a + total_b))
+        phi = math.sqrt(chi2 / (tot_a + total_b))
         if phi < min_corr:
             continue
 
