@@ -23,7 +23,12 @@ def get_crashes(sc, versions, days):
 
 
 def find_deviations(sc, a, b, min_support_diff, min_corr, max_addons):
-    # XXX: Also consider addons in the A group? a.select(functions.explode(a['addons']).alias('addon')).collect() +
+    total_a = a.count()
+    orig_total_a = total_a
+    total_b = b.count()
+
+    # XXX: Should we also consider addons in the A group? a.select(functions.explode(a['addons']).alias('addon')).collect() +
+    #      Could a crash be caused by the absence of an addon? Is it worth the additional complexity?
     all_addons_versions = b.select(functions.explode(b['addons']).alias('addon')).collect()
     all_addons = list()
     for i in range(0, len(all_addons_versions), 2):
@@ -35,8 +40,8 @@ def find_deviations(sc, a, b, min_support_diff, min_corr, max_addons):
     for addon in all_addons:
         all_addons_counts[addon] += 1
 
-    # Too many addons, restrict to the top max_addons.
-    all_addons = [k for k, v in sorted(all_addons_counts.items(), key=lambda (k, v): v, reverse=True)[:max_addons]]
+    # Too many addons, restrict to the top max_addons (that satisfy the minimum support).
+    all_addons = [k for k, v in sorted(all_addons_counts.items(), key=lambda (k, v): v, reverse=True)[:max_addons] if float(v) / total_b > min_support_diff]
 
     # print(all_addons)
 
@@ -70,12 +75,9 @@ def find_deviations(sc, a, b, min_support_diff, min_corr, max_addons):
                  .drop('cpu_name')
 
     dfA = drop_unneeded(augment(a)).cache()
-    # dfA.show(3)
-    total_a = dfA.count()
-    orig_total_a = total_a
     dfB = drop_unneeded(augment(b)).cache()
-    total_b = dfB.count()
 
+    # dfA.show(3)
     # dfA.printSchema()
 
     saved_counts_a = {}
