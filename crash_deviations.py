@@ -12,6 +12,7 @@ from pyspark.sql import functions
 from pyspark.sql import SQLContext
 
 import download_data
+import addons
 
 
 MIN_COUNT = 5 # 5 for chi-squared test.
@@ -40,7 +41,6 @@ def find_deviations(sc, a, b, min_support_diff, min_corr, max_addons):
     # print(all_addons)
 
     # Aliases for the addons (otherwise Spark fails because it can't find the columns associated to addons, probably because they contain special characters).
-    # TODO: Use https://services.addons.mozilla.org/en-US/firefox/api/1.4/search/guid:GUID to get the names.
     addons_map = {}
     reverse_addons_map = {}
     for i in range(0, len(all_addons)):
@@ -256,7 +256,8 @@ def find_deviations(sc, a, b, min_support_diff, min_corr, max_addons):
         transformed_candidate = dict(candidate)
         for key, val in candidate:
             if key in reverse_addons_map:
-                transformed_candidate[reverse_addons_map[key]] = val
+                addon = reverse_addons_map[key]
+                transformed_candidate['Addon "' + (addons.get_addon_name(addon) or addon) + '"'] = val
                 del transformed_candidate[key]
 
         results.append({
