@@ -218,26 +218,27 @@ def download_day_crashes(version, day):
     write_json(path, crashes)
 
 
-def download_crashes(version, days):
+def download_crashes(versions, days):
     if not os.path.exists('crashcorrelations_data'):
         os.mkdir('crashcorrelations_data')
 
     clean_old_data()
 
     for i in range(0, days):
-        download_day_crashes(version, date.today() - timedelta(i))
+        for version in versions:
+            download_day_crashes(version, date.today() - timedelta(i))
 
 
-def get_paths(version, days):
+def get_paths(versions, days):
     last_day = date.today()
-    path = get_path(version, last_day)
+    path = get_path(versions[0], last_day)
     if not exists(path):
         last_day -= timedelta(1)
 
-    return [get_path(version, last_day - timedelta(i)) for i in range(0, days)]
+    return [get_path(version, last_day - timedelta(i)) for i in range(0, days) for version in versions]
 
 
-def get_top_50(version, days):
+def get_top_50(versions, days):
     url = 'https://crash-stats.mozilla.com/api/SuperSearch'
     headers = {
       'Auth-Token': config.get('Socorro', 'token', __token),
@@ -246,7 +247,7 @@ def get_top_50(version, days):
     params = {
         'product': 'Firefox',
         'date': ['>=' + str(date.today() - timedelta(days)), '<' + str(date.today())],
-        'version': version,
+        'version': versions,
         '_results_number': 0,
     }
 
