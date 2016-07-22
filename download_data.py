@@ -14,6 +14,7 @@ import botocore
 import dateutil.parser
 
 import config
+import versions
 
 
 __token = ''
@@ -240,9 +241,6 @@ def get_paths(versions, days):
 
 def get_top_50(versions, days):
     url = 'https://crash-stats.mozilla.com/api/SuperSearch'
-    headers = {
-      'Auth-Token': config.get('Socorro', 'token', __token),
-    }
 
     params = {
         'product': 'Firefox',
@@ -251,21 +249,35 @@ def get_top_50(versions, days):
         '_results_number': 0,
     }
 
-    r = requests.get(url, params=params, headers=headers)
+    r = requests.get(url, params=params)
 
     if r.status_code != 200:
         try:
             error = r.json()['error']
             if error == 'date can\'t be in the future':
                 params['date'] = ['>=' + str(date.today() - timedelta(days) - timedelta(1)), '<' + str(date.today() - timedelta(1))]
+                r = requests.get(url, params=params)
             else:
                 raise Exception(r)
         except:
             print(r.text)
             raise Exception(r)
 
-    if r.status_code != 200:
-        print(r.text)
-        raise Exception(r)
+        if r.status_code != 200:
+            print(r.text)
+            raise Exception(r)
 
     return [signature['term'] for signature in r.json()['facets']['signature']]
+
+
+def get_versions(channel):
+    channel = channel.lower()
+    version = str(versions.get(base=True)[channel])
+
+    r = requests.get('https://crash-stats.mozilla.com/api/ProductVersions', params={
+        'product': 'Firefox',
+        'active': True,
+        'is_rapid_beta': False,
+    })
+
+    return [result['version'] for result in r.json()['hits'] if result['version'].startswith(version)]
