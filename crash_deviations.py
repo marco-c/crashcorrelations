@@ -187,6 +187,9 @@ def find_deviations(sc, a, b, min_support_diff, min_corr, max_addons):
     broadcastVar = sc.broadcast(dfB.columns)
     results_a = dfA.rdd.flatMap(lambda p: [(frozenset([(key,p[key])]), 1) for key in broadcastVar.value]).reduceByKey(lambda x, y: x + y).collect()
     results_b = dfB.rdd.flatMap(lambda p: [(frozenset([(key,p[key])]), 1) for key in broadcastVar.value]).reduceByKey(lambda x, y: x + y).collect()
+    for candidate in [count[0] for count in results_a + results_b]:
+        save_count(candidate, 0, dfA)
+        save_count(candidate, 0, dfB)
     for count in results_a:
         save_count(count[0], count[1], dfA)
     for count in results_b:
