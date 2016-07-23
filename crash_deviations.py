@@ -18,7 +18,7 @@ import addons
 MIN_COUNT = 5 # 5 for chi-squared test.
 
 
-def get_crashes(sc, versions, days, product):
+def get_crashes(sc, versions, days, product='Firefox'):
     return SQLContext(sc).read.format('json').load(download_data.get_paths(versions, days, product))
 
 
