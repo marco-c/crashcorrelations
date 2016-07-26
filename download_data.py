@@ -48,7 +48,7 @@ def delete(path):
 
 
 def clean_old_data():
-    MAX_AGE = 10
+    MAX_AGE = 30
 
     if is_amazon():
         bucket = boto3.resource('s3').Bucket('net-mozaws-prod-us-west-2-pipeline-analysis')
