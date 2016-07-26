@@ -27,37 +27,44 @@ def find_deviations(sc, a, b, min_support_diff, min_corr, max_addons):
     orig_total_a = total_a
     total_b = b.count()
 
-    # XXX: Should we also consider addons in the A group? a.select(functions.explode(a['addons']).alias('addon')).collect() +
-    #      Could a crash be caused by the absence of an addon? Is it worth the additional complexity?
-    all_addons_versions = b.select(functions.explode(b['addons']).alias('addon')).collect()
-    all_addons = list()
-    for i in range(0, len(all_addons_versions), 2):
-        all_addons.append(all_addons_versions[i].asDict()['addon'])
+    if max_addons > 0:
+        # XXX: Should we also consider addons in the A group? a.select(functions.explode(a['addons']).alias('addon')).collect() +
+        #      Could a crash be caused by the absence of an addon? Is it worth the additional complexity?
+        all_addons_versions = b.select(functions.explode(b['addons']).alias('addon')).collect()
+        all_addons = list()
+        for i in range(0, len(all_addons_versions), 2):
+            all_addons.append(all_addons_versions[i].asDict()['addon'])
 
-    # print(len(all_addons))
+        # print(len(all_addons))
 
-    all_addons_counts = defaultdict(int)
-    for addon in all_addons:
-        all_addons_counts[addon] += 1
+        all_addons_counts = defaultdict(int)
+        for addon in all_addons:
+            all_addons_counts[addon] += 1
 
-    # Too many addons, restrict to the top max_addons (that satisfy the minimum support).
-    all_addons = [k for k, v in sorted(all_addons_counts.items(), key=lambda (k, v): v, reverse=True)[:max_addons] if float(v) / total_b > min_support_diff]
+        # Too many addons, restrict to the top max_addons (that satisfy the minimum support).
+        all_addons = [k for k, v in sorted(all_addons_counts.items(), key=lambda (k, v): v, reverse=True)[:max_addons] if float(v) / total_b > min_support_diff]
 
-    # print(all_addons)
+        # print(all_addons)
 
-    # Aliases for the addons (otherwise Spark fails because it can't find the columns associated to addons, probably because they contain special characters).
-    addons_map = {}
-    reverse_addons_map = {}
-    for i in range(0, len(all_addons)):
-        addons_map[all_addons[i]] = 'a' + str(i)
-        reverse_addons_map['a' + str(i)] = all_addons[i]
+        # Aliases for the addons (otherwise Spark fails because it can't find the columns associated to addons, probably because they contain special characters).
+        addons_map = {}
+        reverse_addons_map = {}
+        for i in range(0, len(all_addons)):
+            addons_map[all_addons[i]] = 'a' + str(i)
+            reverse_addons_map['a' + str(i)] = all_addons[i]
 
 
     def augment(df):
-        df = df.select(['*'] + [functions.array_contains(df['addons'], addon).alias(addons_map[addon]) for addon in all_addons])
+        if 'addons' in df.columns:
+            df = df.select(['*'] + [functions.array_contains(df['addons'], addon).alias(addons_map[addon]) for addon in all_addons])
 
-        return df.withColumn('startup', df['uptime'] < 60)\
-                 .withColumn('plugin', df['plugin_version'].isNotNull())
+        if 'uptime' in df.columns:
+            df = df.withColumn('startup', df['uptime'] < 60)
+
+        if 'plugin_version' in df.columns:
+            df = df.withColumn('plugin', df['plugin_version'].isNotNull())
+
+        return df
 
 
     def drop_unneeded(df):
@@ -266,11 +273,12 @@ def find_deviations(sc, a, b, min_support_diff, min_corr, max_addons):
                 continue
 
         transformed_candidate = dict(candidate)
-        for key, val in candidate:
-            if key in reverse_addons_map:
-                addon = reverse_addons_map[key]
-                transformed_candidate['Addon "' + (addons.get_addon_name(addon) or addon) + '"'] = val
-                del transformed_candidate[key]
+        if max_addons > 0:
+            for key, val in candidate:
+                if key in reverse_addons_map:
+                    addon = reverse_addons_map[key]
+                    transformed_candidate['Addon "' + (addons.get_addon_name(addon) or addon) + '"'] = val
+                    del transformed_candidate[key]
 
         results.append({
             'item': transformed_candidate,
@@ -280,21 +288,15 @@ def find_deviations(sc, a, b, min_support_diff, min_corr, max_addons):
 
 
     '''len1 = [result for result in results if len(result['item']) == 1]
-    len2 = [result for result in results if len(result['item']) == 2]
-    others = [result for result in results if len(result['item']) > 2]
+    others = [result for result in results if len(result['item']) > 1]
 
     for result in sorted(len1, key=lambda v: (-abs(v['support_a'] - v['support_b']))):
-        print(str(result['item']) + ' - ' + str(result['support_diff']) + ' - ' + str(result['support_b']) + ' - ' + str(result['support_a']))
-
-    print('\n\n')
-
-    for result in sorted(len2, key=lambda v: (-abs(v['support_a'] - v['support_b']))):
-        print(str(result['item']) + ' - ' + str(result['support_diff']) + ' - ' + str(result['support_b']) + ' - ' + str(result['support_a']))
+        print(str(result['item']) + ' - ' + str(result['support_b']) + ' - ' + str(result['support_a']))
 
     print('\n\n')
 
     for result in sorted(others, key=lambda v: (-round(abs(v['support_a'] - v['support_b']), 2), len(v['item']))):
-        print(str(result['item']) + ' - ' + str(result['support_diff']) + ' - ' + str(result['support_b']) + ' - ' + str(result['support_a']))'''
+        print(str(result['item']) + ' - ' + str(result['support_b']) + ' - ' + str(result['support_a']))'''
 
 
     return results
