@@ -5,7 +5,7 @@
 import os
 import json
 from urlparse import urlparse
-from datetime import (date, timedelta)
+from datetime import datetime, timedelta
 import requests
 import shutil
 
@@ -15,6 +15,10 @@ import dateutil.parser
 
 import config
 import versions
+
+
+def utc_today():
+    return datetime.utcnow().date()
 
 
 __token = ''
@@ -54,12 +58,12 @@ def clean_old_data():
         bucket = boto3.resource('s3').Bucket('net-mozaws-prod-us-west-2-pipeline-analysis')
 
         for key in bucket.objects.filter(Prefix='marco/crashcorrelations_data'):
-            if dateutil.parser.parse(key.key[-15:-5]).date() < date.today() - timedelta(MAX_AGE):
+            if dateutil.parser.parse(key.key[-15:-5]).date() < utc_today() - timedelta(MAX_AGE):
                 key.delete()
     else:
         for root, dirs, files in os.walk('crashcorrelations_data'):
             for name in files:
-                if dateutil.parser.parse(name[-15:-5]).date() < date.today() - timedelta(MAX_AGE):
+                if dateutil.parser.parse(name[-15:-5]).date() < utc_today() - timedelta(MAX_AGE):
                     os.remove(os.path.join('crashcorrelations_data', name))
 
 
@@ -138,12 +142,10 @@ def download_day_crashes(version, day, product='Firefox'):
 
     RESULTS_NUMBER = 1000
 
-    date_param = ['>=' + str(day), '<' + str(day + timedelta(1))]
-
     while not finished:
         params = {
             'product': product,
-            'date': date_param,
+            'date': ['>=' + str(day), '<' + str(day + timedelta(1))] if day != utc_today() else '>=' + str(day),
             'version': version,
             '_columns': [
                 'signature',
@@ -185,16 +187,8 @@ def download_day_crashes(version, day, product='Firefox'):
         r = requests.get(url, params=params, headers=headers)
 
         if r.status_code != 200:
-            try:
-                error = r.json()['error']
-                if error == 'date can\'t be in the future':
-                    date_param = ['>=' + str(day)]
-                    continue
-                else:
-                    raise Exception(r)
-            except:
-                print(r.text)
-                raise Exception(r)
+            print(r.text)
+            raise Exception(r)
 
         found = r.json()['hits']
 
@@ -227,16 +221,11 @@ def download_crashes(versions, days, product='Firefox'):
 
     for i in range(0, days):
         for version in versions:
-            download_day_crashes(version, date.today() - timedelta(i), product)
+            download_day_crashes(version, utc_today() - timedelta(i), product)
 
 
 def get_paths(versions, days, product='Firefox'):
-    last_day = date.today()
-    path = get_path(versions[0], last_day, product)
-    if not exists(path):
-        last_day -= timedelta(1)
-
-    return [get_path(version, last_day - timedelta(i), product) for i in range(0, days) for version in versions]
+    return [get_path(version, utc_today() - timedelta(i), product) for i in range(0, days) for version in versions]
 
 
 def get_top_50(versions, days, product='Firefox'):
@@ -244,7 +233,7 @@ def get_top_50(versions, days, product='Firefox'):
 
     params = {
         'product': product,
-        'date': ['>=' + str(date.today() - timedelta(days)), '<' + str(date.today())],
+        'date': ['>=' + str(utc_today() - timedelta(days)), '<' + str(utc_today())],
         'version': versions,
         '_results_number': 0,
     }
@@ -252,20 +241,8 @@ def get_top_50(versions, days, product='Firefox'):
     r = requests.get(url, params=params)
 
     if r.status_code != 200:
-        try:
-            error = r.json()['error']
-            if error == 'date can\'t be in the future':
-                params['date'] = ['>=' + str(date.today() - timedelta(days) - timedelta(1)), '<' + str(date.today() - timedelta(1))]
-                r = requests.get(url, params=params)
-            else:
-                raise Exception(r)
-        except:
-            print(r.text)
-            raise Exception(r)
-
-        if r.status_code != 200:
-            print(r.text)
-            raise Exception(r)
+        print(r.text)
+        raise Exception(r)
 
     return [signature['term'] for signature in r.json()['facets']['signature']]
 
