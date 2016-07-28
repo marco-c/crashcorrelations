@@ -39,3 +39,4 @@ def plot(results, label_a, label_b, outputFile=None):
         plt.savefig(outputFile)
     else:
         plt.show()
+    plt.close(fig)
