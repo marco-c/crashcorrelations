@@ -79,7 +79,8 @@ def find_deviations(sc, a, b, min_support_diff, min_corr, max_addons):
                  .drop('uptime')\
                  .drop('plugin_version')\
                  .drop('cpu_arch')\
-                 .drop('cpu_name')
+                 .drop('cpu_name')\
+                 .drop('address')
 
     dfA = drop_unneeded(augment(a)).cache()
     dfB = drop_unneeded(augment(b)).cache()
@@ -257,7 +258,10 @@ def find_deviations(sc, a, b, min_support_diff, min_corr, max_addons):
         # Discard element if it is not significative.
         chi2, p, dof, expected = scipy.stats.chi2_contingency([[count_b, count_a], [total_b - count_b, tot_a - count_a]])
         #oddsration, p = scipy.stats.fisher_exact([[count_b, count_a], [total_b - count_b, tot_a - count_a]])
-        alpha_k = min((alpha / pow(2, len(candidate))) / len(candidates[len(candidate)]), alpha_k)
+        num_candidates = len(candidates[len(candidate)])
+        if len(candidate) == 1:
+            num_candidates += len(prior_candidates)
+        alpha_k = min((alpha / pow(2, len(candidate))) / num_candidates, alpha_k)
         if p > alpha_k:
             continue
 
