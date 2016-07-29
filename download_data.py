@@ -150,7 +150,9 @@ def download_day_crashes(version, day, product='Firefox'):
             '_columns': [
                 'signature',
                 'build_id',
+                'address',
                 'platform',
+                'platform_version',
                 'platform_pretty_version',
                 'adapter_vendor_id',
                 'adapter_device_id',
