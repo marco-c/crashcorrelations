@@ -11,9 +11,6 @@ def rule_to_str(rule):
 
 
 def plot(results, label_a, label_b, outputFile=None):
-    if len(results) == 0:
-        return
-
     all_rules = sorted(results, key=lambda v: (-len(v['item']), round(abs(v['support_a'] - v['support_b']), 2), round(v['support_a'], 2)))
 
     values_a = [100 * rule['support_a'] for rule in all_rules]
@@ -33,7 +30,8 @@ def plot(results, label_a, label_b, outputFile=None):
     plt.ylabel('Rule')
     plt.title('Most interesting deviations')
     plt.yticks([i + bar_width for i in index], [rule_to_str(rule['item']) for rule in all_rules])
-    plt.legend()
+    if len(all_rules) > 0:
+        plt.legend()
 
     if outputFile is not None:
         plt.savefig(outputFile)
