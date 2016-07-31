@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 
 
 def rule_to_str(rule):
-    return u' ∧ '.join([str(key) + '="' + str(value) + '"' for key, value in rule.items()])
+    return u' ∧ '.join([unicode(key) + unicode('="') + unicode(str(value)) + unicode('"') for key, value in rule.items()])
 
 
 def plot(results, label_a, label_b, outputFile=None):
