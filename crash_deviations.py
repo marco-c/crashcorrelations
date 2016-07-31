@@ -233,7 +233,7 @@ def find_deviations(sc, a, b, min_support_diff, min_corr, max_addons):
         count_candidates(dfA, candidates[1])
 
     l = 1
-    while len(candidates[l]) > 0 and l < 2:
+    while len(candidates[l]) > 0 and l < 1:
         l += 1
         candidates[l] = generate_candidates(dfA, dfB, candidates[l - 1])
         print(str(l) + ' RULES: ' + str(len(candidates[l])))
