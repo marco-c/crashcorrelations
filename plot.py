@@ -31,7 +31,7 @@ def plot(results, label_a, label_b, outputFile=None):
     plt.title('Most interesting deviations')
     plt.yticks([i + bar_width for i in index], [rule_to_str(rule['item']) for rule in all_rules])
     if len(all_rules) > 0:
-        plt.legend()
+        plt.legend(loc='best')
 
     if outputFile is not None:
         plt.savefig(outputFile)
