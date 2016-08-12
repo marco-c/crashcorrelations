@@ -19,6 +19,9 @@ import config
 import versions
 
 
+SCHEMA_VERSION = '1'
+
+
 def utc_today():
     return datetime.utcnow().date()
 
@@ -54,18 +57,23 @@ def delete(path):
 
 
 def clean_old_data():
+    try:
+        old_schema = read_json('crashcorrelations_data/schema_version')[0]
+    except IOError:
+        old_schema = '0'
+
     MAX_AGE = 30
 
     if is_amazon():
         bucket = boto3.resource('s3').Bucket('net-mozaws-prod-us-west-2-pipeline-analysis')
 
         for key in bucket.objects.filter(Prefix='marco/crashcorrelations_data'):
-            if dateutil.parser.parse(key.key[-15:-5]).date() < utc_today() - timedelta(MAX_AGE):
+            if 'schema_version' not in key.key and (old_schema != SCHEMA_VERSION or dateutil.parser.parse(key.key[-15:-5]).date() < utc_today() - timedelta(MAX_AGE)):
                 key.delete()
     else:
         for root, dirs, files in os.walk('crashcorrelations_data'):
             for name in files:
-                if dateutil.parser.parse(name[-15:-5]).date() < utc_today() - timedelta(MAX_AGE):
+                if 'schema_version' not in name and (old_schema != SCHEMA_VERSION or dateutil.parser.parse(name[-15:-5]).date() < utc_today() - timedelta(MAX_AGE)):
                     os.remove(os.path.join('crashcorrelations_data', name))
 
 
@@ -250,6 +258,7 @@ def download_crashes(versions, days, product='Firefox'):
         os.mkdir('crashcorrelations_data')
 
     clean_old_data()
+    write_json('crashcorrelations_data/schema_version', [SCHEMA_VERSION])
 
     for i in range(0, days):
         for version in versions:
