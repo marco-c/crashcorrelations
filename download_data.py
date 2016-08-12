@@ -176,6 +176,7 @@ def download_day_crashes(version, day, product='Firefox'):
                 'app_notes', # We have some stuff in the app_notes that we can't get from SuperSearch (e.g. if there are two GPUs)
                 'addons',
                 'contains_memory_report',
+                'moz_crash_reason',
             ],
             '_results_number': RESULTS_NUMBER,
             '_results_offset': len(crashes),
