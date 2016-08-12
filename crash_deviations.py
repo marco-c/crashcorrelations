@@ -93,10 +93,8 @@ def find_deviations(sc, a, b, min_support_diff, min_corr, max_addons, analyze_ad
                  .drop('app_notes')\
                  .drop('addons')\
                  .drop('uptime')\
-                 .drop('plugin_version')\
                  .drop('cpu_arch')\
-                 .drop('cpu_name')\
-                 .drop('address')
+                 .drop('cpu_name')
 
     dfA = drop_unneeded(augment(a)).cache()
     dfB = drop_unneeded(augment(b)).cache()
