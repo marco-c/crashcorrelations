@@ -236,7 +236,7 @@ def get_paths(versions, days, product='Firefox'):
     return [get_path(version, last_day - timedelta(i), product) for i in range(0, days) for version in versions]
 
 
-def get_top_50(versions, days, product='Firefox'):
+def get_top(number, versions, days, product='Firefox'):
     url = 'https://crash-stats.mozilla.com/api/SuperSearch'
 
     params = {
@@ -244,6 +244,7 @@ def get_top_50(versions, days, product='Firefox'):
         'date': ['>=' + str(utc_today() - timedelta(days)), '<' + str(utc_today())],
         'version': versions,
         '_results_number': 0,
+        '_facets_size': number,
     }
 
     r = requests.get(url, params=params)

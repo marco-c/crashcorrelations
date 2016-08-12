@@ -16,7 +16,7 @@ def generate_plots(output_dir):
         if e.errno != errno.EEXIST:
             raise e
 
-    results_file = os.path.join(output_dir, 'top50_results.json.gz')
+    results_file = os.path.join(output_dir, 'top100_results.json.gz')
     results_file_backup = results_file + '.old'
 
     # Download the data file if it doesn't exist or if it is one day old.
@@ -57,7 +57,7 @@ def generate_plots(output_dir):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='Top-50 Plot Generator')
+    parser = argparse.ArgumentParser(description='Top-100 Plot Generator')
     parser.add_argument('-o', '--output-directory', action='store', required=True, help='the output directory')
 
     args = parser.parse_args()
