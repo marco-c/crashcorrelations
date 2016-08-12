@@ -295,4 +295,8 @@ def get_versions(channel):
         'is_rapid_beta': False,
     })
 
+    if r.status_code != 200:
+        print(r.text)
+        raise Exception(r)
+
     return [result['version'] for result in r.json()['hits'] if result['version'].startswith(version)]
