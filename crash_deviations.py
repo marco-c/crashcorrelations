@@ -8,8 +8,8 @@ from collections import defaultdict
 import scipy.stats
 import math
 
-from pyspark.sql import functions
-from pyspark.sql import SQLContext
+from pyspark.sql import SQLContext, functions
+from pyspark.sql.types import StringType
 
 import download_data
 import addons
@@ -22,7 +22,7 @@ def get_crashes(sc, versions, days, product='Firefox'):
     return SQLContext(sc).read.format('json').load(download_data.get_paths(versions, days, product))
 
 
-def find_deviations(sc, a, b, min_support_diff, min_corr, max_addons):
+def find_deviations(sc, a, b, min_support_diff, min_corr, max_addons, analyze_addon_versions=False):
     total_a = a.count()
     orig_total_a = total_a
     total_b = b.count()
@@ -56,7 +56,23 @@ def find_deviations(sc, a, b, min_support_diff, min_corr, max_addons):
 
     def augment(df):
         if 'addons' in df.columns:
-            df = df.select(['*'] + [functions.array_contains(df['addons'], addon).alias(addons_map[addon]) for addon in all_addons])
+            def get_version(addons, addon):
+                if addons is None:
+                    return 'N/A'
+
+                for i in range(0, len(addons), 2):
+                    if addons[i] == addon:
+                        return addons[i + 1]
+
+                return 'Not installed'
+
+            def create_get_version_udf(addon):
+                return functions.udf(lambda addons: get_version(addons, addon), StringType())
+
+            if analyze_addon_versions:
+                df = df.select(['*'] + [create_get_version_udf(addon)(df['addons']).alias(addons_map[addon]) for addon in all_addons])
+            else:
+                df = df.select(['*'] + [functions.array_contains(df['addons'], addon).alias(addons_map[addon]) for addon in all_addons])
 
         if 'uptime' in df.columns:
             df = df.withColumn('startup', df['uptime'] < 60)
