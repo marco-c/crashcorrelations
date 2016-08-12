@@ -7,6 +7,8 @@ import json
 from urlparse import urlparse
 from datetime import datetime, timedelta
 import requests
+from requests.adapters import HTTPAdapter
+from requests.packages.urllib3.util.retry import Retry
 import shutil
 
 import boto3
@@ -128,6 +130,15 @@ def write_json(path, data):
         upload(path)
 
 
+def get_with_retries(url, params=None, headers=None):
+    retries = Retry(total=12, backoff_factor=1, status_forcelist=[429])
+
+    s = requests.Session()
+    s.mount(url, HTTPAdapter(max_retries=retries))
+
+    return s.get(url, params=params, headers=headers)
+
+
 def download_day_crashes(version, day, product='Firefox'):
     crashes = []
 
@@ -188,7 +199,7 @@ def download_day_crashes(version, day, product='Firefox'):
         }
 
         print(params)
-        r = requests.get(url, params=params, headers=headers)
+        r = get_with_retries(url, params=params, headers=headers)
 
         if r.status_code != 200:
             print(r.text)
@@ -248,7 +259,7 @@ def get_top(number, versions, days, product='Firefox'):
         '_facets_size': number,
     }
 
-    r = requests.get(url, params=params)
+    r = get_with_retries(url, params=params)
 
     if r.status_code != 200:
         print(r.text)
@@ -261,7 +272,7 @@ def get_versions(channel):
     channel = channel.lower()
     version = str(versions.get(base=True)[channel])
 
-    r = requests.get('https://crash-stats.mozilla.com/api/ProductVersions', params={
+    r = get_with_retries('https://crash-stats.mozilla.com/api/ProductVersions', params={
         'product': 'Firefox',
         'active': True,
         'is_rapid_beta': False,
