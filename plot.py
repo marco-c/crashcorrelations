@@ -23,6 +23,11 @@ def plot(results, label_a, label_b, outputFile=None):
     index = range(len(all_rules))
     bar_width = 0.35
 
+    if label_a.startswith('_'):
+        label_a = ' ' + label_a
+    if label_b.startswith('_'):
+        label_b = ' ' + label_b
+
     plt.barh(index, values_a, bar_width, color='b', label=label_a)
     plt.barh([i + bar_width for i in index], values_b, bar_width, color='r', label=label_b)
 
