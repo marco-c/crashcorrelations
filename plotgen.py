@@ -28,7 +28,7 @@ def generate_plots(output_dir):
             pass
 
         try:
-            urllib.URLopener().retrieve('https://analysis-output.telemetry.mozilla.org/top-50-signatures-correlations/data/top50_results.json.gz', results_file)
+            urllib.URLopener().retrieve('https://analysis-output.telemetry.mozilla.org/top-100-signatures-correlations/data/top100_results.json.gz', results_file)
         except Exception as e:
             # Use the backup copy if there was an error during the download.
             try:
