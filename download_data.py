@@ -139,10 +139,10 @@ def write_json(path, data):
 
 
 def get_with_retries(url, params=None, headers=None):
-    retries = Retry(total=12, backoff_factor=1, status_forcelist=[429])
+    retries = Retry(total=16, backoff_factor=1, status_forcelist=[429])
 
     s = requests.Session()
-    s.mount(url, HTTPAdapter(max_retries=retries))
+    s.mount('https://crash-stats.mozilla.com', HTTPAdapter(max_retries=retries))
 
     return s.get(url, params=params, headers=headers)
 
