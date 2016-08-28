@@ -36,6 +36,7 @@ guids_to_names = {
     'jid1-4P0kohSJxU1qGg@jetpack': 'Hola Unblocker',
     'jetpack-extension@dashlane.com': 'Dashlane',
     'searchme@mybrowserbar.com': 'SearchMe Toolbar',
+    '{22119944-ED35-4ab1-910B-E619EA06A115}': 'RoboForm Toolbar for Firefox',
 }
 
 
