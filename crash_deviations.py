@@ -229,6 +229,9 @@ def find_deviations(sc, a, b, min_support_diff, min_corr, max_addons, analyze_ad
         if elem_val == None and frozenset([(elem_key, u'1')]) in candidates_tmp:
             continue
 
+        if elem_val == None and frozenset([(elem_key, u'Active')]) in candidates_tmp:
+            continue
+
         candidates[1].append(elem)
 
     print('1 RULES: ' + str(len(candidates[1])))
