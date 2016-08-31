@@ -237,13 +237,16 @@ def download_day_crashes(version, day, product='Firefox'):
             if not crash['url']:
                 continue
 
-            o = urlparse(crash['url'])
-            if o.scheme == 'about':
-                pass
-            elif o.scheme != 'http' and o.scheme != 'https':
-                crash['url'] = o.scheme
+            if crash['url'].startswith('ed2k'):
+                crash['url'] = 'ed2k'
             else:
-                crash['url'] = o.netloc
+                o = urlparse(crash['url'])
+                if o.scheme == 'about':
+                    pass
+                elif o.scheme != 'http' and o.scheme != 'https':
+                    crash['url'] = o.scheme
+                else:
+                    crash['url'] = o.netloc
 
         crashes += found
 
