@@ -28,15 +28,15 @@ def plot(results, label_a, label_b, outputFile=None):
     if label_b.startswith('_'):
         label_b = ' ' + label_b
 
-    plt.barh(index, values_a, bar_width, color='b', label=label_a)
-    plt.barh([i + bar_width for i in index], values_b, bar_width, color='r', label=label_b)
+    bar_a = plt.barh(index, values_a, bar_width, color='b', label=label_a)
+    bar_b = plt.barh([i + bar_width for i in index], values_b, bar_width, color='r', label=label_b)
 
     plt.xlabel('Support')
     plt.ylabel('Rule')
     plt.title('Most interesting deviations')
     plt.yticks([i + bar_width for i in index], [rule_to_str(rule['item']) for rule in all_rules])
     if len(all_rules) > 0:
-        plt.legend(loc='best')
+        plt.legend(handles=[bar_b, bar_a], loc='best')
 
     if outputFile is not None:
         plt.savefig(outputFile)
