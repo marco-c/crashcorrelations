@@ -80,6 +80,9 @@ def find_deviations(sc, a, b, min_support_diff, min_corr, max_addons, analyze_ad
         if 'plugin_version' in df.columns:
             df = df.withColumn('plugin', df['plugin_version'].isNotNull())
 
+        if 'app_notes' in df.columns:
+            df = df.withColumn('has dual GPUs', (functions.instr(df['app_notes'], 'Has dual GPUs') != 0))
+
         return df
 
 
