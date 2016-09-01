@@ -62,7 +62,7 @@ def clean_old_data():
     except IOError:
         old_schema = '0'
 
-    MAX_AGE = 30
+    MAX_AGE = 90
 
     if is_amazon():
         bucket = boto3.resource('s3').Bucket('net-mozaws-prod-us-west-2-pipeline-analysis')
