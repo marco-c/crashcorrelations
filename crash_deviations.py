@@ -24,7 +24,6 @@ def get_crashes(sc, versions, days, product='Firefox'):
 
 def find_deviations(sc, a, b, min_support_diff, min_corr, max_addons, analyze_addon_versions=False):
     total_a = a.count()
-    orig_total_a = total_a
     total_b = b.count()
 
     if max_addons > 0:
@@ -239,26 +238,13 @@ def find_deviations(sc, a, b, min_support_diff, min_corr, max_addons, analyze_ad
 
     print('1 RULES: ' + str(len(candidates[1])))
 
-    # Filter reference dataset using the candidates that have support == 100%.
-    prior_candidates = [c for c in candidates[1] if get_count(c, dfB) == total_b]
-    candidates[1] = [c for c in candidates[1] if get_count(c, dfB) != total_b]
-    if len(prior_candidates) > 0:
-        condition = reduce(operator.__and__, [dfA[key] == value if value is not None else dfA[key].isNull() for c in prior_candidates for key, value in c])
-        print(condition)
-        dfA = dfA.filter(condition).cache()
-
-        total_a = dfA.count()
-
-        # Recalculate counts given the rules in prior_candidates are true.
-        count_candidates(dfA, candidates[1])
-
     l = 1
-    while len(candidates[l]) > 0 and l < 1:
+    while len(candidates[l]) > 0 and l < 2:
         l += 1
         candidates[l] = generate_candidates(dfA, dfB, candidates[l - 1])
         print(str(l) + ' RULES: ' + str(len(candidates[l])))
 
-    all_candidates = prior_candidates + sum([candidates[i] for i in range(1,l+1)], [])
+    all_candidates = sum([candidates[i] for i in range(1,l+1)], [])
 
     alpha = 0.05
     alpha_k = alpha
@@ -266,8 +252,7 @@ def find_deviations(sc, a, b, min_support_diff, min_corr, max_addons, analyze_ad
     for candidate in all_candidates:
         count_a = get_count(candidate, dfA)
         count_b = get_count(candidate, dfB)
-        tot_a = total_a if candidate not in prior_candidates else orig_total_a
-        support_a = count_a / tot_a
+        support_a = count_a / total_a
         support_b = count_b / total_b
 
         # Discard element if the support in the subset is not different enough from the support in the entire dataset.
@@ -276,22 +261,20 @@ def find_deviations(sc, a, b, min_support_diff, min_corr, max_addons, analyze_ad
             continue
 
         # Discard element if it is not significative.
-        chi2, p, dof, expected = scipy.stats.chi2_contingency([[count_b, count_a], [total_b - count_b, tot_a - count_a]])
-        #oddsration, p = scipy.stats.fisher_exact([[count_b, count_a], [total_b - count_b, tot_a - count_a]])
+        chi2, p, dof, expected = scipy.stats.chi2_contingency([[count_b, count_a], [total_b - count_b, total_a - count_a]])
+        #oddsration, p = scipy.stats.fisher_exact([[count_b, count_a], [total_b - count_b, total_a - count_a]])
         num_candidates = len(candidates[len(candidate)])
-        if len(candidate) == 1:
-            num_candidates += len(prior_candidates)
         alpha_k = min((alpha / pow(2, len(candidate))) / num_candidates, alpha_k)
         if p > alpha_k:
             continue
 
-        phi = math.sqrt(chi2 / (tot_a + total_b))
+        phi = math.sqrt(chi2 / (total_a + total_b))
         if phi < min_corr:
             continue
 
         # Discard element if the support is almost the same as if the variables were independent.
         if len(candidate) != 1:
-            independent_support_a = reduce(operator.mul, [get_count(frozenset([item]), dfA) / tot_a for item in candidate])
+            independent_support_a = reduce(operator.mul, [get_count(frozenset([item]), dfA) / total_a for item in candidate])
             independent_support_b = reduce(operator.mul, [get_count(frozenset([item]), dfB) / total_b for item in candidate])
             if abs(independent_support_a - support_a) <= max(0.01, 0.1 * support_a) and abs(independent_support_b - support_b) <= max(0.01, 0.1 * support_b):
                 continue
