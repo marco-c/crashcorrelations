@@ -22,7 +22,61 @@ def get_crashes(sc, versions, days, product='Firefox'):
     return SQLContext(sc).read.format('json').load(download_data.get_paths(versions, days, product))
 
 
-def find_deviations(sc, a, b, min_support_diff, min_corr, max_addons, analyze_addon_versions=False):
+saved_counts_a = {}
+saved_counts_b = {}
+
+
+def get_cached_columns(df):
+    global saved_counts_a, saved_counts_b
+    saved_counts = saved_counts_a if df == 'a' else saved_counts_b
+    return set([list(k)[0][0] for k in saved_counts.keys() if len(k) == 1])
+
+
+def get_cached_first_level_results(df):
+    global saved_counts_a, saved_counts_b
+    saved_counts = saved_counts_a if df == 'a' else saved_counts_b
+    return [(k,v) for k,v in saved_counts.items() if len(k) == 1]
+
+
+def clear_count(df):
+    global saved_counts_a, saved_counts_b
+    if df == 'a':
+        saved_counts_a = {}
+        saved_columns_a = []
+    elif df == 'b':
+        saved_counts_b = {}
+
+
+def is_count_empty(df):
+    global saved_counts_a, saved_counts_b
+    saved_counts = saved_counts_a if df == 'a' else saved_counts_b
+    return len(saved_counts) == 0
+
+
+def save_count(candidate, count, df):
+    global saved_counts_a, saved_counts_b
+    saved_counts = saved_counts_a if df == 'a' else saved_counts_b
+    saved_counts[candidate] = float(count)
+
+
+def has_count(candidate, df):
+    global saved_counts_a, saved_counts_b
+    saved_counts = saved_counts_a if df == 'a' else saved_counts_b
+    return candidate in saved_counts
+
+
+def get_count(candidate, df):
+    global saved_counts_a, saved_counts_b
+    saved_counts = saved_counts_a if df == 'a' else saved_counts_b
+    return saved_counts[candidate]
+
+
+def find_deviations(sc, a, b, min_support_diff, min_corr, max_addons, analyze_addon_versions=False, cache_a=False, cache_b=False):
+    if not cache_a:
+        clear_count('a')
+    if not cache_b:
+        clear_count('b')
+
     total_a = a.count()
     total_b = b.count()
 
@@ -45,12 +99,13 @@ def find_deviations(sc, a, b, min_support_diff, min_corr, max_addons, analyze_ad
 
         # print(all_addons)
 
-        # Aliases for the addons (otherwise Spark fails because it can't find the columns associated to addons, probably because they contain special characters).
+        # Aliases for the addons (otherwise Spark fails because it can't find the columns associated to addons, because they contain dots).
         addons_map = {}
         reverse_addons_map = {}
         for i in range(0, len(all_addons)):
-            addons_map[all_addons[i]] = 'a' + str(i)
-            reverse_addons_map['a' + str(i)] = all_addons[i]
+            column_name = all_addons[i].replace('.', '_')
+            addons_map[all_addons[i]] = column_name
+            reverse_addons_map[column_name] = all_addons[i]
 
 
     def augment(df):
@@ -104,19 +159,6 @@ def find_deviations(sc, a, b, min_support_diff, min_corr, max_addons, analyze_ad
     # dfA.show(3)
     # dfA.printSchema()
 
-    saved_counts_a = {}
-    saved_counts_b = {}
-
-
-    def save_count(candidate, count, df):
-        saved_counts = saved_counts_a if df == dfA else saved_counts_b
-        saved_counts[candidate] = float(count)
-
-
-    def get_count(candidate, df):
-        saved_counts = saved_counts_a if df == dfA else saved_counts_b
-        return saved_counts[candidate]
-
 
     def union(frozenset1, frozenset2):
         res = frozenset1.union(frozenset2)
@@ -126,9 +168,9 @@ def find_deviations(sc, a, b, min_support_diff, min_corr, max_addons, analyze_ad
 
 
     def should_prune(parent1, parent2, candidate):
-        count_a = get_count(candidate, dfA)
+        count_a = get_count(candidate, 'a')
         support_a = count_a / total_a
-        count_b = get_count(candidate, dfB)
+        count_b = get_count(candidate, 'b')
         support_b = count_b / total_b
 
         if count_a < MIN_COUNT:
@@ -172,14 +214,16 @@ def find_deviations(sc, a, b, min_support_diff, min_corr, max_addons, analyze_ad
 
 
     def count_candidates(df, candidates):
-        broadcastVar = sc.broadcast(candidates)
+        candidates_left = [c for c in candidates if not has_count(c, 'a' if df == dfA else 'b')]
+        # Initialize all results to 0.
+        for candidate in candidates_left:
+            save_count(candidate, 0, 'a' if df == dfA else 'b')
+
+        broadcastVar = sc.broadcast(candidates_left)
         results = df.rdd.flatMap(lambda p: [(fset, 1) for fset in broadcastVar.value if all(p[key] == value for key, value in fset)]).reduceByKey(lambda x, y: x + y).collect()
 
-        # Initialize all results to 0.
-        for candidate in candidates:
-            save_count(candidate, 0, df)
         for result in results:
-            save_count(result[0], result[1], df)
+            save_count(result[0], result[1], 'a' if df == dfA else 'b')
 
         return [result[0] for result in results]
 
@@ -208,16 +252,23 @@ def find_deviations(sc, a, b, min_support_diff, min_corr, max_addons, analyze_ad
     }
 
     # Generate first level candidates.
+    results_a = get_cached_first_level_results('a')
+    a_columns = [c for c in dfA.columns if c not in get_cached_columns('a')]
+    broadcastVar = sc.broadcast(a_columns)
+    if len(a_columns) > 0:
+      results_a += dfA.rdd.flatMap(lambda p: [(frozenset([(key,p[key])]), 1) for key in broadcastVar.value]).reduceByKey(lambda x, y: x + y).collect()
+
     broadcastVar = sc.broadcast(dfB.columns)
-    results_a = dfA.rdd.flatMap(lambda p: [(frozenset([(key,p[key])]), 1) for key in broadcastVar.value]).reduceByKey(lambda x, y: x + y).collect()
     results_b = dfB.rdd.flatMap(lambda p: [(frozenset([(key,p[key])]), 1) for key in broadcastVar.value]).reduceByKey(lambda x, y: x + y).collect()
     for candidate in [count[0] for count in results_a + results_b]:
-        save_count(candidate, 0, dfA)
-        save_count(candidate, 0, dfB)
+        if not has_count(candidate, 'a'):
+            save_count(candidate, 0, 'a')
+        if not has_count(candidate, 'b'):
+            save_count(candidate, 0, 'b')
     for count in results_a:
-        save_count(count[0], count[1], dfA)
+        save_count(count[0], count[1], 'a')
     for count in results_b:
-        save_count(count[0], count[1], dfB)
+        save_count(count[0], count[1], 'b')
 
     # Filter first level candidates.
     candidates_tmp = set([count[0] for count in results_b if not should_prune(None, None, count[0])])
@@ -250,8 +301,8 @@ def find_deviations(sc, a, b, min_support_diff, min_corr, max_addons, analyze_ad
     alpha_k = alpha
     results = []
     for candidate in all_candidates:
-        count_a = get_count(candidate, dfA)
-        count_b = get_count(candidate, dfB)
+        count_a = get_count(candidate, 'a')
+        count_b = get_count(candidate, 'b')
         support_a = count_a / total_a
         support_b = count_b / total_b
 
@@ -289,8 +340,8 @@ def find_deviations(sc, a, b, min_support_diff, min_corr, max_addons, analyze_ad
 
         results.append({
             'item': transformed_candidate,
-            'support_a': support_a,
-            'support_b': support_b,
+            'count_a': count_a,
+            'count_b': count_b,
         })
 
 
