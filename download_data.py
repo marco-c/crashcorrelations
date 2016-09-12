@@ -62,7 +62,7 @@ def clean_old_data():
     except IOError:
         old_schema = '0'
 
-    MAX_AGE = 90
+    MAX_AGE = 30
 
     if is_amazon():
         bucket = boto3.resource('s3').Bucket('net-mozaws-prod-us-west-2-pipeline-analysis')
@@ -218,12 +218,13 @@ def download_day_crashes(version, day, product='Firefox'):
             '_results_offset': len(crashes),
         }
 
-        url = 'https://crash-stats.mozilla.com/api/SuperSearchUnredacted'
-        headers = {
-          'Auth-Token': config.get('Socorro', 'token', __token),
-        }
+        url = 'https://crash-stats.mozilla.com/api/SuperSearch'
+        headers = {}
+        token = config.get('Socorro', 'token', __token)
+        if token:
+            url += 'Unredacted'
+            headers['Auth-Token'] = token
 
-        print(params)
         r = get_with_retries(url, params=params, headers=headers)
 
         if r.status_code != 200:
@@ -232,21 +233,22 @@ def download_day_crashes(version, day, product='Firefox'):
 
         found = r.json()['hits']
 
-        # Remove the URLs now, we don't want to store them locally!
-        for crash in found:
-            if not crash['url']:
-                continue
+        if token:
+            # Remove the URLs now, we don't want to store them locally!
+            for crash in found:
+                if not crash['url']:
+                    continue
 
-            if crash['url'].startswith('ed2k'):
-                crash['url'] = 'ed2k'
-            else:
-                o = urlparse(crash['url'])
-                if o.scheme == 'about':
-                    pass
-                elif o.scheme != 'http' and o.scheme != 'https':
-                    crash['url'] = o.scheme
+                if crash['url'].startswith('ed2k'):
+                    crash['url'] = 'ed2k'
                 else:
-                    crash['url'] = o.netloc
+                    o = urlparse(crash['url'])
+                    if o.scheme == 'about':
+                        pass
+                    elif o.scheme != 'http' and o.scheme != 'https':
+                        crash['url'] = o.scheme
+                    else:
+                        crash['url'] = o.netloc
 
         crashes += found
 
@@ -257,6 +259,11 @@ def download_day_crashes(version, day, product='Firefox'):
 
 
 def download_crashes(versions, days, product='Firefox'):
+    global SCHEMA_VERSION
+
+    if config.get('Socorro', 'token', __token):
+        SCHEMA_VERSION += '-with-token'
+
     if not os.path.exists('crashcorrelations_data'):
         os.mkdir('crashcorrelations_data')
 
