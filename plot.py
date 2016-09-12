@@ -10,11 +10,11 @@ def rule_to_str(rule):
     return u' ∧ '.join([unicode(key) + unicode('="') + unicode(str(value)) + unicode('"') for key, value in rule.items()])
 
 
-def plot(results, label_a, label_b, outputFile=None):
-    all_rules = sorted(results, key=lambda v: (-len(v['item']), round(abs(v['support_a'] - v['support_b']), 2), round(v['support_a'], 2)))
+def plot(results, total_a, total_b, label_a, label_b, outputFile=None):
+    all_rules = sorted(results, key=lambda v: (-len(v['item']), round(abs(v['count_a'] / total_a - v['count_b'] / total_b), 2), round(v['count_a'] / total_a, 2)))
 
-    values_a = [100 * rule['support_a'] for rule in all_rules]
-    values_b = [100 * rule['support_b'] for rule in all_rules]
+    values_a = [100 * rule['count_a'] / total_a for rule in all_rules]
+    values_b = [100 * rule['count_b'] / total_b for rule in all_rules]
 
     plt.rc('figure', autolayout=True)
     plt.rc('font', size=22)

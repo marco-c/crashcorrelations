@@ -35,4 +35,4 @@ if __name__ == "__main__":
 
     results = crash_deviations.find_deviations(sc, df_a, df_b, min_support_diff=0.15, min_corr=0.03, max_addons=50)
 
-    plot.plot(results, 'Overall', args.signature)
+    plot.plot(results, df_a.count(), df_b.count(), 'Overall', args.signature)
