@@ -225,6 +225,7 @@ def download_day_crashes(version, day, product='Firefox'):
             url += 'Unredacted'
             headers['Auth-Token'] = token
 
+        print(params)
         r = get_with_retries(url, params=params, headers=headers)
 
         if r.status_code != 200:
