@@ -311,6 +311,14 @@ def find_deviations(sc, a, b, min_support_diff, min_corr, max_addons, analyze_ad
         if support_diff < min_support_diff:
             continue
 
+        # Discard element if the support is almost the same as if the variables were independent.
+        if len(candidate) != 1:
+            # independent_support_a = reduce(operator.mul, [get_count(frozenset([item]), dfA) / total_a for item in candidate])
+            independent_support_b = reduce(operator.mul, [get_count(frozenset([item]), dfB) / total_b for item in candidate])
+            # if abs(independent_support_a - support_a) <= max(0.01, 0.1 * support_a) and abs(independent_support_b - support_b) <= max(0.01, 0.1 * support_b):
+            if abs(independent_support_b - support_b) <= max(0.01, 0.1 * support_b):
+                continue
+
         # Discard element if it is not significative.
         chi2, p, dof, expected = scipy.stats.chi2_contingency([[count_b, count_a], [total_b - count_b, total_a - count_a]])
         #oddsration, p = scipy.stats.fisher_exact([[count_b, count_a], [total_b - count_b, total_a - count_a]])
@@ -322,14 +330,6 @@ def find_deviations(sc, a, b, min_support_diff, min_corr, max_addons, analyze_ad
         phi = math.sqrt(chi2 / (total_a + total_b))
         if phi < min_corr:
             continue
-
-        # Discard element if the support is almost the same as if the variables were independent.
-        if len(candidate) != 1:
-            # independent_support_a = reduce(operator.mul, [get_count(frozenset([item]), dfA) / total_a for item in candidate])
-            independent_support_b = reduce(operator.mul, [get_count(frozenset([item]), dfB) / total_b for item in candidate])
-            # if abs(independent_support_a - support_a) <= max(0.01, 0.1 * support_a) and abs(independent_support_b - support_b) <= max(0.01, 0.1 * support_b):
-            if abs(independent_support_b - support_b) <= max(0.01, 0.1 * support_b):
-                continue
 
         transformed_candidate = dict(candidate)
         if max_addons > 0:
