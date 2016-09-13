@@ -325,9 +325,10 @@ def find_deviations(sc, a, b, min_support_diff, min_corr, max_addons, analyze_ad
 
         # Discard element if the support is almost the same as if the variables were independent.
         if len(candidate) != 1:
-            independent_support_a = reduce(operator.mul, [get_count(frozenset([item]), dfA) / total_a for item in candidate])
+            # independent_support_a = reduce(operator.mul, [get_count(frozenset([item]), dfA) / total_a for item in candidate])
             independent_support_b = reduce(operator.mul, [get_count(frozenset([item]), dfB) / total_b for item in candidate])
-            if abs(independent_support_a - support_a) <= max(0.01, 0.1 * support_a) and abs(independent_support_b - support_b) <= max(0.01, 0.1 * support_b):
+            # if abs(independent_support_a - support_a) <= max(0.01, 0.1 * support_a) and abs(independent_support_b - support_b) <= max(0.01, 0.1 * support_b):
+            if abs(independent_support_b - support_b) <= max(0.01, 0.1 * support_b):
                 continue
 
         transformed_candidate = dict(candidate)
