@@ -24,6 +24,7 @@ def get_crashes(sc, versions, days, product='Firefox'):
 
 saved_counts_a = {}
 saved_counts_b = {}
+saved_addons = None
 
 
 def get_cached_columns(df):
@@ -42,6 +43,7 @@ def clear_cache(df):
     global saved_counts_a, saved_counts_b
     if df == 'a':
         saved_counts_a = {}
+        saved_addons = None
     elif df == 'b':
         saved_counts_b = {}
 
@@ -71,7 +73,10 @@ def get_count(candidate, df):
 
 
 def get_addons(df):
-  return df.select(['signature'] + [functions.explode(df['addons']).alias('addon')]).rdd.zipWithIndex().filter(lambda (v, i): i % 2 == 0).map(lambda (v, i): v).map(lambda v: (v, 1)).reduceByKey(lambda x, y: x + y).collect()
+    global saved_addons
+    if saved_addons is None:
+        saved_addons = df.select(['signature'] + [functions.explode(df['addons']).alias('addon')]).rdd.zipWithIndex().filter(lambda (v, i): i % 2 == 0).map(lambda (v, i): v).map(lambda v: (v, 1)).reduceByKey(lambda x, y: x + y).collect()
+    return saved_addons
 
 
 def find_deviations(sc, a, b=None, signature=None, min_support_diff=0.15, min_corr=0.03, all_addons=None, analyze_addon_versions=False, cache_a=False, cache_b=False):
