@@ -72,6 +72,12 @@ def get_count(candidate, df):
     return saved_counts[candidate]
 
 
+def get_global_count(df, df_name):
+    if not has_count(frozenset(), df_name):
+        save_count(frozenset(), df.count(), df_name)
+    return get_count(frozenset(), df_name)
+
+
 def get_addons(df):
     global saved_addons
     if saved_addons is None:
@@ -94,8 +100,8 @@ def find_deviations(sc, a, b=None, signature=None, min_support_diff=0.15, min_co
     if all_addons is None:
         all_addons = get_addons(a)
 
-    total_a = a.count()
-    total_b = b.count()
+    total_a = get_global_count(a, 'a')
+    total_b = get_global_count(b, 'b')
 
     all_addons = [addon for (s, addon), c in all_addons if (signature is None or s == signature) and float(c) / total_b > min_support_diff]
 
