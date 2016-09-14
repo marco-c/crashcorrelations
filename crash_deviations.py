@@ -359,13 +359,13 @@ def find_deviations(sc, a, b=None, signature=None, min_support_diff=0.15, min_co
     '''len1 = [result for result in results if len(result['item']) == 1]
     others = [result for result in results if len(result['item']) > 1]
 
-    for result in sorted(len1, key=lambda v: (-abs(v['support_a'] - v['support_b']))):
-        print(str(result['item']) + ' - ' + str(result['support_b']) + ' - ' + str(result['support_a']))
+    for result in sorted(len1, key=lambda v: (-abs(v['count_a'] / total_a - v['count_b'] / total_b))):
+        print(str(result['item']) + ' - ' + str(result['count_b'] / total_b) + ' - ' + str(result['count_a'] / total_a))
 
     print('\n\n')
 
-    for result in sorted(others, key=lambda v: (-round(abs(v['support_a'] - v['support_b']), 2), len(v['item']))):
-        print(str(result['item']) + ' - ' + str(result['support_b']) + ' - ' + str(result['support_a']))'''
+    for result in sorted(others, key=lambda v: (-round(abs(v['count_a'] / total_a - v['count_b'] / total_b), 2), len(v['item']))):
+        print(str(result['item']) + ' - ' + str(result['count_b'] / total_b) + ' - ' + str(result['count_a'] / total_a))'''
 
 
     return results, total_a, total_b
