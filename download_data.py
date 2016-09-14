@@ -38,7 +38,7 @@ def is_amazon():
 
     if __is_amazon is None:
         try:
-            requests.get('http://169.254.169.254/latest/meta-data/ami-id', timeout=10)
+            boto3.client('s3').head_bucket(Bucket='net-mozaws-prod-us-west-2-pipeline-analysis')
             __is_amazon = True
         except:
             __is_amazon = False
