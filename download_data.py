@@ -225,7 +225,7 @@ def download_day_crashes(version, day, product='Firefox'):
             url += 'Unredacted'
             headers['Auth-Token'] = token
 
-        print(params)
+        print(str(day) + ' - ' + str(len(crashes)))
         r = get_with_retries(url, params=params, headers=headers)
 
         if r.status_code != 200:
@@ -262,7 +262,7 @@ def download_day_crashes(version, day, product='Firefox'):
 def download_crashes(versions, days, product='Firefox'):
     global SCHEMA_VERSION
 
-    if config.get('Socorro', 'token', __token):
+    if config.get('Socorro', 'token', __token) and not SCHEMA_VERSION.endswith('-with-token'):
         SCHEMA_VERSION += '-with-token'
 
     if not os.path.exists('crashcorrelations_data'):
