@@ -46,16 +46,6 @@ def is_amazon():
     return __is_amazon
 
 
-def delete(path):
-    if is_amazon():
-        bucket = boto3.resource('s3').Bucket('net-mozaws-prod-us-west-2-pipeline-analysis')
-
-        for key in bucket.objects.filter(Prefix='marco/' + path):
-            key.delete()
-    else:
-        shutil.rmtree(path)
-
-
 def clean_old_data():
     try:
         old_schema = read_json('crashcorrelations_data/schema_version')[0]
