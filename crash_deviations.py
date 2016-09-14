@@ -38,11 +38,10 @@ def get_cached_first_level_results(df):
     return [(k,v) for k,v in saved_counts.items() if len(k) == 1]
 
 
-def clear_count(df):
+def clear_cache(df):
     global saved_counts_a, saved_counts_b
     if df == 'a':
         saved_counts_a = {}
-        saved_columns_a = []
     elif df == 'b':
         saved_counts_b = {}
 
@@ -71,41 +70,37 @@ def get_count(candidate, df):
     return saved_counts[candidate]
 
 
-def find_deviations(sc, a, b, min_support_diff, min_corr, max_addons, analyze_addon_versions=False, cache_a=False, cache_b=False):
+def get_addons(df):
+  return df.select(['signature'] + [functions.explode(df['addons']).alias('addon')]).rdd.zipWithIndex().filter(lambda (v, i): i % 2 == 0).map(lambda (v, i): v).map(lambda v: (v, 1)).reduceByKey(lambda x, y: x + y).collect()
+
+
+def find_deviations(sc, a, b=None, signature=None, min_support_diff=0.15, min_corr=0.03, all_addons=None, analyze_addon_versions=False, cache_a=False, cache_b=False):
     if not cache_a:
-        clear_count('a')
+        clear_cache('a')
     if not cache_b:
-        clear_count('b')
+        clear_cache('b')
+
+    if b is None and signature is None:
+        raise Exception('Either b or signature should not be None')
+
+    if signature is not None:
+        b = a.filter(a['signature'] == signature)
+
+    if all_addons is None:
+        all_addons = get_addons(a)
 
     total_a = a.count()
     total_b = b.count()
 
-    if max_addons > 0:
-        # XXX: Should we also consider addons in the A group? a.select(functions.explode(a['addons']).alias('addon')).collect() +
-        #      Could a crash be caused by the absence of an addon? Is it worth the additional complexity?
-        all_addons_versions = b.select(functions.explode(b['addons']).alias('addon')).collect()
-        all_addons = list()
-        for i in range(0, len(all_addons_versions), 2):
-            all_addons.append(all_addons_versions[i].asDict()['addon'])
+    all_addons = [addon for (s, addon), c in all_addons if (signature is None or s == signature) and float(c) / total_b > min_support_diff]
 
-        # print(len(all_addons))
-
-        all_addons_counts = defaultdict(int)
-        for addon in all_addons:
-            all_addons_counts[addon] += 1
-
-        # Too many addons, restrict to the top max_addons (that satisfy the minimum support).
-        all_addons = [k for k, v in sorted(all_addons_counts.items(), key=lambda (k, v): v, reverse=True)[:max_addons] if float(v) / total_b > min_support_diff]
-
-        # print(all_addons)
-
-        # Aliases for the addons (otherwise Spark fails because it can't find the columns associated to addons, because they contain dots).
-        addons_map = {}
-        reverse_addons_map = {}
-        for i in range(0, len(all_addons)):
-            column_name = all_addons[i].replace('.', '_')
-            addons_map[all_addons[i]] = column_name
-            reverse_addons_map[column_name] = all_addons[i]
+    # Aliases for the addons (otherwise Spark fails because it can't find the columns associated to addons, because they contain dots).
+    addons_map = {}
+    reverse_addons_map = {}
+    for addon in all_addons:
+        column_name = addon.replace('.', '_')
+        addons_map[addon] = column_name
+        reverse_addons_map[column_name] = addon
 
 
     def augment(df):
@@ -274,7 +269,7 @@ def find_deviations(sc, a, b, min_support_diff, min_corr, max_addons, analyze_ad
     candidates_tmp = set([count[0] for count in results_b if not should_prune(None, None, count[0])])
     # Remove useless rules (e.g. addon_X=True and addon_X=False or is_garbage_collecting=1 and is_garbage_collecting=None).
     for elem in candidates_tmp:
-        elem_key, elem_val = [(key, val) for key, val in elem][0]
+        elem_key, elem_val = list(elem)[0]
 
         if elem_val == False and frozenset([(elem_key, True)]) in candidates_tmp:
             continue
@@ -283,6 +278,11 @@ def find_deviations(sc, a, b, min_support_diff, min_corr, max_addons, analyze_ad
             continue
 
         if elem_val == None and frozenset([(elem_key, u'Active')]) in candidates_tmp:
+            continue
+
+        # Could a crash be caused by the absence of an addon? Could be, but it
+        # isn't worth the additional complexity.
+        if elem_val == False and elem_key in reverse_addons_map:
             continue
 
         candidates[1].append(elem)
@@ -315,8 +315,8 @@ def find_deviations(sc, a, b, min_support_diff, min_corr, max_addons, analyze_ad
         if len(candidate) != 1:
             # independent_support_a = reduce(operator.mul, [get_count(frozenset([item]), dfA) / total_a for item in candidate])
             independent_support_b = reduce(operator.mul, [get_count(frozenset([item]), dfB) / total_b for item in candidate])
-            # if abs(independent_support_a - support_a) <= max(0.01, 0.1 * support_a) and abs(independent_support_b - support_b) <= max(0.01, 0.1 * support_b):
-            if abs(independent_support_b - support_b) <= max(0.01, 0.1 * support_b):
+            # if abs(independent_support_a - support_a) <= max(0.01, 0.15 * support_a) and abs(independent_support_b - support_b) <= max(0.01, 0.15 * support_b):
+            if abs(independent_support_b - support_b) <= max(0.01, 0.15 * support_b):
                 continue
 
         # Discard element if it is not significative.
@@ -332,12 +332,11 @@ def find_deviations(sc, a, b, min_support_diff, min_corr, max_addons, analyze_ad
             continue
 
         transformed_candidate = dict(candidate)
-        if max_addons > 0:
-            for key, val in candidate:
-                if key in reverse_addons_map:
-                    addon = reverse_addons_map[key]
-                    transformed_candidate['Addon "' + (addons.get_addon_name(addon) or addon) + '"'] = val
-                    del transformed_candidate[key]
+        for key, val in candidate:
+            if key in reverse_addons_map:
+                addon = reverse_addons_map[key]
+                transformed_candidate['Addon "' + (addons.get_addon_name(addon) or addon) + '"'] = val
+                del transformed_candidate[key]
 
         results.append({
             'item': transformed_candidate,
@@ -358,4 +357,4 @@ def find_deviations(sc, a, b, min_support_diff, min_corr, max_addons, analyze_ad
         print(str(result['item']) + ' - ' + str(result['support_b']) + ' - ' + str(result['support_a']))'''
 
 
-    return results
+    return results, total_a, total_b

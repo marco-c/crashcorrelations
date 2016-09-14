@@ -31,8 +31,7 @@ if __name__ == "__main__":
     download_data.download_crashes(versions=versions, days=5, product=args.product)
 
     df_a = crash_deviations.get_crashes(sc, versions=versions, days=5, product=args.product)
-    df_b = df_a.filter(df_a['signature'] == args.signature)
 
-    results = crash_deviations.find_deviations(sc, df_a, df_b, min_support_diff=0.15, min_corr=0.03, max_addons=50)
+    results, total_a, total_b = crash_deviations.find_deviations(sc, df_a, signature=args.signature)
 
-    plot.plot(results, df_a.count(), df_b.count(), 'Overall', args.signature)
+    plot.plot(results, total_a, total_b, 'Overall', args.signature)
