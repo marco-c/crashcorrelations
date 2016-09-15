@@ -22,6 +22,8 @@ def get_crashes(sc, versions, days, product='Firefox'):
     return SQLContext(sc).read.format('json').load(download_data.get_paths(versions, days, product))
 
 
+old_df_a = None
+old_df_b = None
 saved_counts_a = {}
 saved_counts_b = {}
 saved_addons = None
@@ -39,13 +41,17 @@ def get_cached_first_level_results(df, columns):
     return [(k,v) for k,v in saved_counts.items() if len(k) == 1 and list(k)[0][0] in columns]
 
 
-def clear_cache(df):
-    global saved_counts_a, saved_counts_b
-    if df == 'a':
+def clear_caches(df_a, df_b):
+    global old_df_a, old_df_b, saved_counts_a, saved_counts_b, saved_addons
+
+    if df_a != old_df_a:
         saved_counts_a = {}
         saved_addons = None
-    elif df == 'b':
+        old_df_a = df_a
+
+    if df_b != old_df_b:
         saved_counts_b = {}
+        old_df_b = df_b
 
 
 def is_count_empty(df):
@@ -95,17 +101,14 @@ def get_addons(df):
     return saved_addons
 
 
-def find_deviations(sc, a, b=None, signature=None, min_support_diff=0.15, min_corr=0.03, all_addons=None, analyze_addon_versions=False, cache_a=False, cache_b=False):
-    if not cache_a:
-        clear_cache('a')
-    if not cache_b:
-        clear_cache('b')
-
+def find_deviations(sc, a, b=None, signature=None, min_support_diff=0.15, min_corr=0.03, all_addons=None, analyze_addon_versions=False):
     if b is None and signature is None:
         raise Exception('Either b or signature should not be None')
 
     if signature is not None:
         b = a.filter(a['signature'] == signature)
+
+    clear_caches(a, b)
 
     total_a = get_global_count(a, 'a')
     total_b = get_global_count(b, 'b')
