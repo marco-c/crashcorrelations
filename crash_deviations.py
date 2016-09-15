@@ -147,17 +147,14 @@ def find_deviations(sc, a, b=None, signature=None, min_support_diff=0.15, min_co
 
 
     def drop_unneeded(df):
-        return df.drop('signature')\
-                 .drop('total_virtual_memory')\
-                 .drop('total_physical_memory')\
-                 .drop('available_virtual_memory')\
-                 .drop('available_physical_memory')\
-                 .drop('oom_allocation_size')\
-                 .drop('app_notes')\
-                 .drop('addons')\
-                 .drop('uptime')\
-                 .drop('cpu_arch')\
-                 .drop('cpu_name')
+        return df.select([c for c in df.columns if c not in [
+            'signature',
+            'total_virtual_memory', 'total_physical_memory', 'available_virtual_memory', 'available_physical_memory', 'oom_allocation_size',
+            'app_notes',
+            'addons',
+            'uptime',
+            'cpu_arch', 'cpu_name',
+        ]])
 
     dfA = drop_unneeded(augment(a)).cache()
     dfB = drop_unneeded(augment(b)).cache()
