@@ -81,7 +81,12 @@ def get_global_count(df, df_name):
 def get_addons(df):
     global saved_addons
     if saved_addons is None:
-        saved_addons = df.select(['signature'] + [functions.explode(df['addons']).alias('addon')]).rdd.zipWithIndex().filter(lambda (v, i): i % 2 == 0).map(lambda (v, i): v).map(lambda v: (v, 1)).reduceByKey(lambda x, y: x + y).collect()
+        saved_addons = df.select(['signature'] + [functions.explode(df['addons']).alias('addon')]).rdd\
+        .zipWithIndex()\
+        .filter(lambda (v, i): i % 2 == 0)\
+        .map(lambda (v, i): v)\
+        .map(lambda v: (v, 1))\
+        .reduceByKey(lambda x, y: x + y).collect()
     return saved_addons
 
 
@@ -97,22 +102,19 @@ def find_deviations(sc, a, b=None, signature=None, min_support_diff=0.15, min_co
     if signature is not None:
         b = a.filter(a['signature'] == signature)
 
-    if all_addons is None:
-        all_addons = get_addons(a)
-
     total_a = get_global_count(a, 'a')
     total_b = get_global_count(b, 'b')
 
-    all_addons = [addon for (s, addon), c in all_addons if (signature is None or s == signature) and float(c) / total_b > min_support_diff]
+    if all_addons is None:
+        all_addons = get_addons(a)
+
+    all_addons = [(addon, c) for (s, addon), c in all_addons if (signature is None or s == signature) and float(c) / total_b > min_support_diff]
 
     # Aliases for the addons (otherwise Spark fails because it can't find the columns associated to addons, because they contain dots).
-    addons_map = {}
-    reverse_addons_map = {}
-    for addon in all_addons:
-        column_name = addon.replace('.', '_')
-        addons_map[addon] = column_name
-        reverse_addons_map[column_name] = addon
+    for addon, count in all_addons:
+        save_count(frozenset([(addon.replace('.', '__DOT__'), True)]), count, 'b')
 
+    all_addons = [addon for addon, c in all_addons]
 
     def augment(df):
         if 'addons' in df.columns:
@@ -130,9 +132,9 @@ def find_deviations(sc, a, b=None, signature=None, min_support_diff=0.15, min_co
                 return functions.udf(lambda addons: get_version(addons, addon), StringType())
 
             if analyze_addon_versions:
-                df = df.select(['*'] + [create_get_version_udf(addon)(df['addons']).alias(addons_map[addon]) for addon in all_addons])
+                df = df.select(['*'] + [create_get_version_udf(addon)(df['addons']).alias(addon.replace('.', '__DOT__')) for addon in all_addons])
             else:
-                df = df.select(['*'] + [functions.array_contains(df['addons'], addon).alias(addons_map[addon]) for addon in all_addons])
+                df = df.select(['*'] + [functions.array_contains(df['addons'], addon).alias(addon.replace('.', '__DOT__')) for addon in all_addons])
 
         if 'uptime' in df.columns:
             df = df.withColumn('startup', df['uptime'] < 60)
@@ -261,8 +263,12 @@ def find_deviations(sc, a, b=None, signature=None, min_support_diff=0.15, min_co
     if len(a_columns) > 0:
       results_a += dfA.rdd.flatMap(lambda p: [(frozenset([(key,p[key])]), 1) for key in broadcastVar.value]).reduceByKey(lambda x, y: x + y).collect()
 
-    broadcastVar = sc.broadcast(dfB.columns)
-    results_b = dfB.rdd.flatMap(lambda p: [(frozenset([(key,p[key])]), 1) for key in broadcastVar.value]).reduceByKey(lambda x, y: x + y).collect()
+    results_b = get_cached_first_level_results('b')
+    b_columns = [c for c in dfB.columns if c not in get_cached_columns('b')]
+    broadcastVar = sc.broadcast(b_columns)
+    if len(b_columns) > 0:
+      results_b += dfB.rdd.flatMap(lambda p: [(frozenset([(key,p[key])]), 1) for key in broadcastVar.value]).reduceByKey(lambda x, y: x + y).collect()
+
     for candidate in [count[0] for count in results_a + results_b]:
         if not has_count(candidate, 'a'):
             save_count(candidate, 0, 'a')
@@ -290,7 +296,7 @@ def find_deviations(sc, a, b=None, signature=None, min_support_diff=0.15, min_co
 
         # Could a crash be caused by the absence of an addon? Could be, but it
         # isn't worth the additional complexity.
-        if elem_val == False and elem_key in reverse_addons_map:
+        if elem_val == False and elem_key.replace('__DOT__', '.') in all_addons:
             continue
 
         candidates[1].append(elem)
@@ -341,8 +347,8 @@ def find_deviations(sc, a, b=None, signature=None, min_support_diff=0.15, min_co
 
         transformed_candidate = dict(candidate)
         for key, val in candidate:
-            if key in reverse_addons_map:
-                addon = reverse_addons_map[key]
+            addon = key.replace('__DOT__', '.')
+            if addon in all_addons:
                 transformed_candidate['Addon "' + (addons.get_addon_name(addon) or addon) + '"'] = val
                 del transformed_candidate[key]
 
