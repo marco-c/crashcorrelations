@@ -8,7 +8,7 @@ from collections import defaultdict
 import scipy.stats
 import math
 
-from pyspark.sql import SQLContext, functions
+from pyspark.sql import SQLContext, Row, functions
 from pyspark.sql.types import StringType
 
 import download_data
@@ -27,16 +27,16 @@ saved_counts_b = {}
 saved_addons = None
 
 
-def get_cached_columns(df):
+def get_cached_columns(df, columns):
     global saved_counts_a, saved_counts_b
     saved_counts = saved_counts_a if df == 'a' else saved_counts_b
-    return set([list(k)[0][0] for k in saved_counts.keys() if len(k) == 1])
+    return set([list(k)[0][0] for k in saved_counts.keys() if len(k) == 1 and list(k)[0][0] in columns])
 
 
-def get_cached_first_level_results(df):
+def get_cached_first_level_results(df, columns):
     global saved_counts_a, saved_counts_b
     saved_counts = saved_counts_a if df == 'a' else saved_counts_b
-    return [(k,v) for k,v in saved_counts.items() if len(k) == 1]
+    return [(k,v) for k,v in saved_counts.items() if len(k) == 1 and list(k)[0][0] in columns]
 
 
 def clear_cache(df):
@@ -80,12 +80,18 @@ def get_global_count(df, df_name):
 
 def get_addons(df):
     global saved_addons
+
     if saved_addons is None:
-        saved_addons = df.select(['signature'] + [functions.explode(df['addons']).alias('addon')]).rdd\
-        .zipWithIndex()\
-        .filter(lambda (v, i): i % 2 == 0)\
-        .map(lambda (v, i): (v, 1))\
-        .reduceByKey(lambda x, y: x + y).collect()
+        addons = df.select(['signature'] + [functions.explode(df['addons']).alias('addon')]).rdd.zipWithIndex().filter(lambda (v, i): i % 2 == 0).flatMap(lambda (v, i): [(v, 1), (v['addon'], 1)]).reduceByKey(lambda x, y: x + y).collect()
+
+        addons_a = [addon for addon in addons if not isinstance(addon[0], Row)]
+        saved_addons = [addon for addon in addons if isinstance(addon[0], Row)]
+
+        for addon, count in addons_a:
+            # Could a crash be caused by the absence of an addon? Could be, but it
+            # isn't worth the additional complexity.
+            save_count(frozenset([(addon.replace('.', '__DOT__'), True)]), count, 'a')
+
     return saved_addons
 
 
@@ -111,6 +117,8 @@ def find_deviations(sc, a, b=None, signature=None, min_support_diff=0.15, min_co
 
     # Aliases for the addons (otherwise Spark fails because it can't find the columns associated to addons, because they contain dots).
     for addon, count in all_addons:
+        # Could a crash be caused by the absence of an addon? Could be, but it
+        # isn't worth the additional complexity.
         save_count(frozenset([(addon.replace('.', '__DOT__'), True)]), count, 'b')
 
     all_addons = [addon for addon, c in all_addons]
@@ -256,14 +264,14 @@ def find_deviations(sc, a, b=None, signature=None, min_support_diff=0.15, min_co
     }
 
     # Generate first level candidates.
-    results_a = get_cached_first_level_results('a')
-    a_columns = [c for c in dfA.columns if c not in get_cached_columns('a')]
+    results_a = get_cached_first_level_results('a', dfA.columns)
+    a_columns = [c for c in dfA.columns if c not in get_cached_columns('a', dfA.columns)]
     broadcastVar = sc.broadcast(a_columns)
     if len(a_columns) > 0:
       results_a += dfA.rdd.flatMap(lambda p: [(frozenset([(key,p[key])]), 1) for key in broadcastVar.value]).reduceByKey(lambda x, y: x + y).collect()
 
-    results_b = get_cached_first_level_results('b')
-    b_columns = [c for c in dfB.columns if c not in get_cached_columns('b')]
+    results_b = get_cached_first_level_results('b', dfB.columns)
+    b_columns = [c for c in dfB.columns if c not in get_cached_columns('b', dfB.columns)]
     broadcastVar = sc.broadcast(b_columns)
     if len(b_columns) > 0:
       results_b += dfB.rdd.flatMap(lambda p: [(frozenset([(key,p[key])]), 1) for key in broadcastVar.value]).reduceByKey(lambda x, y: x + y).collect()
@@ -291,11 +299,6 @@ def find_deviations(sc, a, b=None, signature=None, min_support_diff=0.15, min_co
             continue
 
         if elem_val == None and frozenset([(elem_key, u'Active')]) in candidates_tmp:
-            continue
-
-        # Could a crash be caused by the absence of an addon? Could be, but it
-        # isn't worth the additional complexity.
-        if elem_val == False and elem_key.replace('__DOT__', '.') in all_addons:
             continue
 
         candidates[1].append(elem)
