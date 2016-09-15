@@ -84,8 +84,7 @@ def get_addons(df):
         saved_addons = df.select(['signature'] + [functions.explode(df['addons']).alias('addon')]).rdd\
         .zipWithIndex()\
         .filter(lambda (v, i): i % 2 == 0)\
-        .map(lambda (v, i): v)\
-        .map(lambda v: (v, 1))\
+        .map(lambda (v, i): (v, 1))\
         .reduceByKey(lambda x, y: x + y).collect()
     return saved_addons
 
