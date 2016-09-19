@@ -19,7 +19,7 @@ import config
 import versions
 
 
-SCHEMA_VERSION = '1'
+SCHEMA_VERSION = '2'
 
 
 def utc_today():
@@ -174,7 +174,6 @@ def download_day_crashes(version, day, product='Firefox'):
                 'contains_memory_report',
                 'cpu_arch',
                 'cpu_info',
-                'cpu_name',
                 'date',
                 'dom_ipc_enabled',
                 'gmp_plugin',

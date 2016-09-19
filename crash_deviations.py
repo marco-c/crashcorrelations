@@ -207,7 +207,6 @@ def find_deviations(sc, a, b=None, signature=None, min_support_diff=0.15, min_co
             'graphics_critical_error',
             'addons',
             'uptime',
-            'cpu_arch', 'cpu_name',
         ]])
 
     dfA = drop_unneeded(augment(a)).cache()
