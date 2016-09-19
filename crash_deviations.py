@@ -13,6 +13,7 @@ from pyspark.sql.types import StringType
 
 import download_data
 import addons
+import gfx_critical_errors
 
 
 MIN_COUNT = 5 # 5 for chi-squared test.
@@ -27,6 +28,7 @@ old_df_b = None
 saved_counts_a = {}
 saved_counts_b = {}
 saved_addons = None
+saved_critical_errors = None
 
 
 def get_cached_columns(df, columns):
@@ -101,7 +103,28 @@ def get_addons(df):
     return saved_addons
 
 
-def find_deviations(sc, a, b=None, signature=None, min_support_diff=0.15, min_corr=0.03, all_addons=None, analyze_addon_versions=False):
+def get_gfx_critical_errors(df, all_gfx_critical_errors=None):
+    global saved_critical_errors
+
+    if all_gfx_critical_errors is None:
+        all_gfx_critical_errors = gfx_critical_errors.get_critical_errors()
+
+    # Aliases for the errors (otherwise Spark fails because it can't find the columns associated to errors, because they contain dots).
+    all_gfx_critical_errors = [error.replace('.', '__DOT__') for error in all_gfx_critical_errors]
+
+    if saved_critical_errors is None:
+        errors = df.select(['signature'] + [(functions.instr(df['graphics_critical_error'], error.replace('__DOT__', '.')) != 0).alias(error) for error in all_gfx_critical_errors]).rdd.flatMap(lambda v: [(error, 1) for error in all_gfx_critical_errors if v[error]] + [((v['signature'], error), 1) for error in all_gfx_critical_errors if v[error]]).reduceByKey(lambda x, y: x + y).collect()
+
+        critical_errors_a = [error for error in errors if isinstance(error[0], basestring)]
+        saved_critical_errors = [error for error in errors if not isinstance(error[0], basestring)]
+
+        for error, count in critical_errors_a:
+            save_count(frozenset([(error, True)]), count, 'a')
+
+    return saved_critical_errors
+
+
+def find_deviations(sc, a, b=None, signature=None, min_support_diff=0.15, min_corr=0.03, all_addons=None, all_gfx_critical_errors=None, analyze_addon_versions=False):
     if b is None and signature is None:
         raise Exception('Either b or signature should not be None')
 
@@ -113,6 +136,20 @@ def find_deviations(sc, a, b=None, signature=None, min_support_diff=0.15, min_co
     total_a = get_global_count(a, 'a')
     total_b = get_global_count(b, 'b')
 
+
+    # Count graphics critical errors.
+    if all_gfx_critical_errors is None:
+        all_gfx_critical_errors = get_gfx_critical_errors(a)
+
+    all_gfx_critical_errors = [(error, c) for (s, error), c in all_gfx_critical_errors if (signature is None or s == signature) and float(c) / total_b > min_support_diff]
+
+    for error, count in all_gfx_critical_errors:
+        save_count(frozenset([(error, True)]), count, 'b')
+
+    all_gfx_critical_errors = [error for error, c in all_gfx_critical_errors]
+
+
+    # Count addons.
     if all_addons is None:
         all_addons = get_addons(a)
 
@@ -125,6 +162,7 @@ def find_deviations(sc, a, b=None, signature=None, min_support_diff=0.15, min_co
         save_count(frozenset([(addon.replace('.', '__DOT__'), True)]), count, 'b')
 
     all_addons = [addon for addon, c in all_addons]
+
 
     def augment(df):
         if 'addons' in df.columns:
@@ -155,6 +193,9 @@ def find_deviations(sc, a, b=None, signature=None, min_support_diff=0.15, min_co
         if 'app_notes' in df.columns:
             df = df.withColumn('has dual GPUs', (functions.instr(df['app_notes'], 'Has dual GPUs') != 0))
 
+        if 'graphics_critical_error' in df.columns:
+            df = df.select(['*'] + [(functions.instr(df['graphics_critical_error'], error.replace('__DOT__', '.')) != 0).alias(error) for error in all_gfx_critical_errors])
+
         return df
 
 
@@ -163,6 +204,7 @@ def find_deviations(sc, a, b=None, signature=None, min_support_diff=0.15, min_co
             'signature',
             'total_virtual_memory', 'total_physical_memory', 'available_virtual_memory', 'available_physical_memory', 'oom_allocation_size',
             'app_notes',
+            'graphics_critical_error',
             'addons',
             'uptime',
             'cpu_arch', 'cpu_name',
@@ -352,9 +394,12 @@ def find_deviations(sc, a, b=None, signature=None, min_support_diff=0.15, min_co
 
         transformed_candidate = dict(candidate)
         for key, val in candidate:
-            addon = key.replace('__DOT__', '.')
-            if addon in all_addons:
-                transformed_candidate['Addon "' + (addons.get_addon_name(addon) or addon) + '"'] = val
+            addon_or_error = key.replace('__DOT__', '.')
+            if addon_or_error in all_addons:
+                transformed_candidate['Addon "' + (addons.get_addon_name(addon_or_error) or addon_or_error) + '"'] = val
+                del transformed_candidate[key]
+            if key in all_gfx_critical_errors:
+                transformed_candidate['GFX_ERROR "' + addon_or_error + '"'] = val
                 del transformed_candidate[key]
 
         results.append({
