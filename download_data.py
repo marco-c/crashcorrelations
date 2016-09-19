@@ -206,6 +206,7 @@ def download_day_crashes(version, day, product='Firefox'):
             ],
             '_results_number': RESULTS_NUMBER,
             '_results_offset': len(crashes),
+            '_facets_size': 0,
         }
 
         url = 'https://crash-stats.mozilla.com/api/SuperSearch'
