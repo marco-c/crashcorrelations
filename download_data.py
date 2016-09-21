@@ -309,4 +309,4 @@ def get_versions(channel):
         print(r.text)
         raise Exception(r)
 
-    return [result['version'] for result in r.json()['hits'] if result['version'].startswith(version)]
+    return [result['version'] for result in r.json()['hits'] if result['version'].startswith(version) and result['build_type'] == channel]
