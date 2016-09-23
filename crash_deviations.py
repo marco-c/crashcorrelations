@@ -60,17 +60,16 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
         groups = [(signature, reference.filter(reference['signature'] == signature)) for signature in signatures]
         total_groups = dict(reference.select('signature').filter(reference['signature'].isin(signatures)).groupBy('signature').count().rdd.map(lambda p: (p['signature'], p['count'])).collect())
     else:
-        total_groups = dict([(group[0], group[1].count()) for group in groups])
+        total_groups = dict([(group_name, group_df.count()) for group_name, group_df in groups])
 
-    total_reference = reference.count()
-    group_names = [group[0] for group in groups]
-
-    for group_name in group_names:
+    for group_name, df in groups:
         if total_groups[group_name] < MIN_COUNT:
             print(group_name + ' is too small: ' + str(total_groups[group_name]) + ' crash reports.')
-            group_names.remove(group_name)
-            if signatures is not None:
-                signatures.remove(group_name)
+
+    total_reference = reference.count()
+    group_names = [group_name for group_name, group_df in groups if total_groups[group_name] >= MIN_COUNT]
+    if signatures is not None:
+        signatures = group_names
 
     def save_results(results_ref, results_groups):
         all_results = results_ref + sum(results_groups.values(), [])
