@@ -12,7 +12,7 @@ import plot
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Signature Correlations')
-    parser.add_argument('signature', action='store', help='The signature you\'re interested in.')
+    parser.add_argument('signatures', action='store', nargs='+', help='The signatures you\'re interested in.')
     parser.add_argument('-p', '--product', action='store', default='Firefox', help='The product you\'re interested in.')
 
     group = parser.add_mutually_exclusive_group(required=True)
@@ -32,9 +32,7 @@ if __name__ == "__main__":
 
     df_a = crash_deviations.get_crashes(sc, versions=versions, days=5, product=args.product)
 
-    signatures = args.signature
-
-    results, total_reference, total_groups = crash_deviations.find_deviations(sc, df_a, signatures=signatures)
+    results, total_reference, total_groups = crash_deviations.find_deviations(sc, df_a, signatures=args.signatures)
 
     for signature in signatures:
         print(signature)
