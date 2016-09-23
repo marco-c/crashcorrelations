@@ -81,6 +81,9 @@ def upload(path):
 def exists(path):
     if is_amazon():
         try:
+            prefix = 's3://net-mozaws-prod-us-west-2-pipeline-analysis/marco/'
+            if prefix in path:
+                path = path[len(prefix):]
             boto3.resource('s3').Object('net-mozaws-prod-us-west-2-pipeline-analysis', 'marco/' + path).load()
         except botocore.exceptions.ClientError as e:
             if e.response['Error']['Code'] == '404':
