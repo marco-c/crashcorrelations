@@ -58,10 +58,11 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
 
     if signatures is not None:
         groups = [(signature, reference.filter(reference['signature'] == signature)) for signature in signatures]
+        total_groups = dict(reference.select('signature').filter(reference['signature'].isin(signatures)).groupBy('signature').count().rdd.map(lambda p: (p['signature'], p['count'])).collect())
+    else:
+        total_groups = dict([(group[0], group[1].count()) for group in groups])
 
     total_reference = reference.count()
-    # TODO: when a set of signatures is passed, count in one go.
-    total_groups = dict([(group[0], group[1].count()) for group in groups])
     group_names = [group[0] for group in groups]
 
     for group_name in group_names:
