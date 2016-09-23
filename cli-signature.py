@@ -32,6 +32,22 @@ if __name__ == "__main__":
 
     df_a = crash_deviations.get_crashes(sc, versions=versions, days=5, product=args.product)
 
-    results, total_a, total_b = crash_deviations.find_deviations(sc, df_a, signature=args.signature)
+    signatures = args.signature
 
-    plot.plot(results, total_a, total_b, 'Overall', args.signature)
+    results, total_reference, total_groups = crash_deviations.find_deviations(sc, df_a, signatures=signatures)
+
+    for signature in signatures:
+        print(signature)
+
+        len1 = [result for result in results[signature] if len(result['item']) == 1]
+        others = [result for result in results[signature] if len(result['item']) > 1]
+
+        for result in sorted(len1, key=lambda v: (-abs(v['count_reference'] / total_reference - v['count_group'] / total_groups[signature]))):
+            print(str(result['item']) + ' - ' + str(result['count_group'] / total_groups[signature]) + ' - ' + str(result['count_reference'] / total_reference))
+
+        print('\n\n')
+
+        for result in sorted(others, key=lambda v: (-round(abs(v['count_reference'] / total_reference - v['count_group'] / total_groups[signature]), 2), len(v['item']))):
+            print(str(result['item']) + ' - ' + str(result['count_group'] / total_groups[signature]) + ' - ' + str(result['count_reference'] / total_reference))
+
+        print('\n\n\n')

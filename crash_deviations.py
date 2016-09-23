@@ -23,145 +23,108 @@ def get_crashes(sc, versions, days, product='Firefox'):
     return SQLContext(sc).read.format('json').load(download_data.get_paths(versions, days, product))
 
 
-old_df_a = None
-old_df_b = None
-saved_counts_a = {}
-saved_counts_b = {}
-saved_addons = None
-saved_critical_errors = None
+saved_counts = {}
 
 
-def get_cached_columns(df, columns):
-    global saved_counts_a, saved_counts_b
-    saved_counts = saved_counts_a if df == 'a' else saved_counts_b
-    return set([list(k)[0][0] for k in saved_counts.keys() if len(k) == 1 and list(k)[0][0] in columns])
+def get_columns(df, columns):
+    global saved_counts
+    if df not in saved_counts:
+        return set()
+    return set([list(k)[0][0] for k in saved_counts[df].keys() if len(k) == 1 and list(k)[0][0] in columns])
 
 
-def get_cached_first_level_results(df, columns):
-    global saved_counts_a, saved_counts_b
-    saved_counts = saved_counts_a if df == 'a' else saved_counts_b
-    return [(k,v) for k,v in saved_counts.items() if len(k) == 1 and list(k)[0][0] in columns]
-
-
-def clear_caches(df_a, df_b):
-    global old_df_a, old_df_b, saved_counts_a, saved_counts_b, saved_addons
-
-    if df_a != old_df_a:
-        saved_counts_a = {}
-        saved_addons = None
-        old_df_a = df_a
-
-    if df_b != old_df_b:
-        saved_counts_b = {}
-        old_df_b = df_b
-
-
-def is_count_empty(df):
-    global saved_counts_a, saved_counts_b
-    saved_counts = saved_counts_a if df == 'a' else saved_counts_b
-    return len(saved_counts) == 0
+def get_first_level_results(df, columns):
+    global saved_counts
+    if df not in saved_counts:
+        return []
+    return [(k,v) for k,v in saved_counts[df].items() if len(k) == 1 and list(k)[0][0] in columns]
 
 
 def save_count(candidate, count, df):
-    global saved_counts_a, saved_counts_b
-    saved_counts = saved_counts_a if df == 'a' else saved_counts_b
-    saved_counts[candidate] = float(count)
-
-
-def has_count(candidate, df):
-    global saved_counts_a, saved_counts_b
-    saved_counts = saved_counts_a if df == 'a' else saved_counts_b
-    return candidate in saved_counts
+    global saved_counts
+    if df not in saved_counts:
+        saved_counts[df] = {}
+    saved_counts[df][candidate] = float(count)
 
 
 def get_count(candidate, df):
-    global saved_counts_a, saved_counts_b
-    saved_counts = saved_counts_a if df == 'a' else saved_counts_b
-    return saved_counts[candidate]
+    global saved_counts
+    return saved_counts[df][candidate]
 
 
-def get_global_count(df, df_name):
-    if not has_count(frozenset(), df_name):
-        save_count(frozenset(), df.count(), df_name)
-    return get_count(frozenset(), df_name)
+def find_deviations(sc, reference, groups=None, signatures=None, min_support_diff=0.15, min_corr=0.03, all_addons=None, all_gfx_critical_errors=None, analyze_addon_versions=False):
+    if groups is None and signatures is None:
+        raise Exception('Either groups or signatures should not be None')
 
+    if signatures is not None:
+        groups = [(signature, reference.filter(reference['signature'] == signature)) for signature in signatures]
 
-def get_addons(df):
-    global saved_addons
+    total_reference = reference.count()
+    # TODO: when a set of signatures is passed, count in one go.
+    total_groups = dict([(group[0], group[1].count()) for group in groups])
+    group_names = [group[0] for group in groups]
 
-    if saved_addons is None:
-        addons = df.select(['signature'] + [functions.explode(df['addons']).alias('addon')]).rdd.zipWithIndex().filter(lambda (v, i): i % 2 == 0).flatMap(lambda (v, i): [(v, 1), (v['addon'], 1)]).reduceByKey(lambda x, y: x + y).collect()
+    def save_results(results_ref, results_groups):
+        all_results = results_ref + sum(results_groups.values(), [])
 
-        addons_a = [addon for addon in addons if not isinstance(addon[0], Row)]
-        saved_addons = [addon for addon in addons if isinstance(addon[0], Row)]
+        for element, count in all_results:
+            if isinstance(element, basestring):
+                element = frozenset([(element.replace('.', '__DOT__'), True)])
 
-        for addon, count in addons_a:
-            # Could a crash be caused by the absence of an addon? Could be, but it
-            # isn't worth the additional complexity.
-            save_count(frozenset([(addon.replace('.', '__DOT__'), True)]), count, 'a')
+            save_count(element, 0, 'reference')
+            for group_name in group_names:
+                save_count(element, 0, group_name)
 
-    return saved_addons
+        for element, count in results_ref:
+            if isinstance(element, basestring):
+                element = frozenset([(element.replace('.', '__DOT__'), True)])
 
+            save_count(element, count, 'reference')
 
-def get_gfx_critical_errors(df, all_gfx_critical_errors=None):
-    global saved_critical_errors
+        for group_name in group_names:
+            for element, count in results_groups[group_name]:
+                if isinstance(element, basestring):
+                    element = frozenset([(element.replace('.', '__DOT__'), True)])
 
-    if all_gfx_critical_errors is None:
-        all_gfx_critical_errors = gfx_critical_errors.get_critical_errors()
-
-    # Aliases for the errors (otherwise Spark fails because it can't find the columns associated to errors, because they contain dots).
-    all_gfx_critical_errors = [error.replace('.', '__DOT__') for error in all_gfx_critical_errors]
-
-    if saved_critical_errors is None:
-        errors = df.select(['signature'] + [(functions.instr(df['graphics_critical_error'], error.replace('__DOT__', '.')) != 0).alias(error) for error in all_gfx_critical_errors]).rdd.flatMap(lambda v: [(error, 1) for error in all_gfx_critical_errors if v[error]] + [((v['signature'], error), 1) for error in all_gfx_critical_errors if v[error]]).reduceByKey(lambda x, y: x + y).collect()
-
-        critical_errors_a = [error for error in errors if isinstance(error[0], basestring)]
-        saved_critical_errors = [error for error in errors if not isinstance(error[0], basestring)]
-
-        for error, count in critical_errors_a:
-            save_count(frozenset([(error, True)]), count, 'a')
-
-    return saved_critical_errors
-
-
-def find_deviations(sc, a, b=None, signature=None, min_support_diff=0.15, min_corr=0.03, all_addons=None, all_gfx_critical_errors=None, analyze_addon_versions=False):
-    if b is None and signature is None:
-        raise Exception('Either b or signature should not be None')
-
-    if signature is not None:
-        b = a.filter(a['signature'] == signature)
-
-    clear_caches(a, b)
-
-    total_a = get_global_count(a, 'a')
-    total_b = get_global_count(b, 'b')
+                save_count(element, count, group_name)
 
 
     # Count graphics critical errors.
     if all_gfx_critical_errors is None:
-        all_gfx_critical_errors = get_gfx_critical_errors(a)
+        all_gfx_critical_errors = [error.replace('.', '__DOT__') for error in gfx_critical_errors.get_critical_errors()]
 
-    all_gfx_critical_errors = [(error, c) for (s, error), c in all_gfx_critical_errors if (signature is None or s == signature) and float(c) / total_b > min_support_diff]
+        if signatures is not None:
+            found_errors = reference.select(['signature'] + [(functions.instr(reference['graphics_critical_error'], error.replace('__DOT__', '.')) != 0).alias(error) for error in all_gfx_critical_errors]).rdd.flatMap(lambda v: [(error, 1) for error in all_gfx_critical_errors if v[error]] + [((v['signature'], error), 1) for error in all_gfx_critical_errors if v[error] and v['signature'] in signatures]).reduceByKey(lambda x, y: x + y).collect()
 
-    for error, count in all_gfx_critical_errors:
-        save_count(frozenset([(error, True)]), count, 'b')
+            errors_ref = [error for error in found_errors if isinstance(error[0], basestring)]
+            errors_signatures = [error for error in found_errors if not isinstance(error[0], basestring)]
+            errors_groups = dict([(signature, [(error, count) for (s, error), count in errors_signatures if s == signature]) for signature in signatures])
+        else:
+            errors_ref = reference.select([(functions.instr(reference['graphics_critical_error'], error.replace('__DOT__', '.')) != 0).alias(error) for error in all_gfx_critical_errors]).rdd.flatMap(lambda v: [(error, 1) for error in all_gfx_critical_errors if v[error]]).reduceByKey(lambda x, y: x + y).collect()
 
-    all_gfx_critical_errors = [error for error, c in all_gfx_critical_errors]
+            errors_groups = dict([(group[0], group[1].select([(functions.instr(reference['graphics_critical_error'], error.replace('__DOT__', '.')) != 0).alias(error) for error in all_gfx_critical_errors]).rdd.flatMap(lambda v: [(error, 1) for error in all_gfx_critical_errors if v[error]]).reduceByKey(lambda x, y: x + y).collect()) for group in groups])
 
+        save_results(errors_ref, errors_groups)
+
+        all_gfx_critical_errors = set([error for error, count in errors_ref if float(count) / total_reference > min_support_diff] + [error for group_name in group_names for error, count in errors_groups[group_name] if float(count) / total_groups[group_name] > min_support_diff])
 
     # Count addons.
     if all_addons is None:
-        all_addons = get_addons(a)
+        if signatures is not None:
+            # TODO: Only count addons for the signatures in the 'signatures' array, like we're doing with gfx errors
+            found_addons = reference.select(['signature'] + [functions.explode(reference['addons']).alias('addon')]).rdd.zipWithIndex().filter(lambda (v, i): i % 2 == 0).flatMap(lambda (v, i): [(v, 1), (v['addon'], 1)]).reduceByKey(lambda x, y: x + y).collect()
 
-    all_addons = [(addon, c) for (s, addon), c in all_addons if (signature is None or s == signature) and float(c) / total_b > min_support_diff]
+            addons_ref = [addon for addon in found_addons if not isinstance(addon[0], Row)]
+            addons_signatures = [addon for addon in found_addons if isinstance(addon[0], Row)]
+            addons_groups = dict([(signature, [(addon, count) for (s, addon), count in addons_signatures if s == signature]) for signature in signatures])
+        else:
+            addons_ref = reference.select(functions.explode(reference['addons']).alias('addon')).rdd.zipWithIndex().filter(lambda (v, i): i % 2 == 0).map(lambda (v, i): (v['addon'], 1)).reduceByKey(lambda x, y: x + y).collect()
 
-    # Aliases for the addons (otherwise Spark fails because it can't find the columns associated to addons, because they contain dots).
-    for addon, count in all_addons:
-        # Could a crash be caused by the absence of an addon? Could be, but it
-        # isn't worth the additional complexity.
-        save_count(frozenset([(addon.replace('.', '__DOT__'), True)]), count, 'b')
+            addons_groups = dict([(group[0], group[1].select(functions.explode(reference['addons']).alias('addon')).rdd.zipWithIndex().filter(lambda (v, i): i % 2 == 0).map(lambda (v, i): (v['addon'], 1)).reduceByKey(lambda x, y: x + y).collect()) for group in groups])
 
-    all_addons = [addon for addon, c in all_addons]
+        save_results(addons_ref, addons_groups)
+
+        all_addons = set([addon for addon, count in addons_ref if float(count) / total_reference > min_support_diff] + [addon for group_name in group_names for addon, count in addons_groups[group_name] if float(count) / total_groups[group_name] > min_support_diff])
 
 
     def augment(df):
@@ -201,7 +164,6 @@ def find_deviations(sc, a, b=None, signature=None, min_support_diff=0.15, min_co
 
     def drop_unneeded(df):
         return df.select([c for c in df.columns if c not in [
-            'signature',
             'total_virtual_memory', 'total_physical_memory', 'available_virtual_memory', 'available_physical_memory', 'oom_allocation_size',
             'app_notes',
             'graphics_critical_error',
@@ -209,11 +171,12 @@ def find_deviations(sc, a, b=None, signature=None, min_support_diff=0.15, min_co
             'uptime',
         ]])
 
-    dfA = drop_unneeded(augment(a)).cache()
-    dfB = drop_unneeded(augment(b)).cache()
+    dfReference = drop_unneeded(augment(reference)).cache()
+    if signatures is None:
+        groups = [(group[0], drop_unneeded(augment(group[1])).cache()) for group in groups]
 
-    # dfA.show(3)
-    # dfA.printSchema()
+    # dfReference.show(3)
+    # dfReference.printSchema()
 
 
     def union(frozenset1, frozenset2):
@@ -223,201 +186,207 @@ def find_deviations(sc, a, b=None, signature=None, min_support_diff=0.15, min_co
         return res
 
 
-    def should_prune(parent1, parent2, candidate):
-        count_a = get_count(candidate, 'a')
-        support_a = count_a / total_a
-        count_b = get_count(candidate, 'b')
-        support_b = count_b / total_b
+    def should_prune(group_name, parent1, parent2, candidate):
+        count_reference = get_count(candidate, 'reference')
+        support_reference = count_reference / total_reference
+        count_group = get_count(candidate, group_name)
+        support_group = count_group / total_groups[group_name]
 
-        if count_a < MIN_COUNT:
+        if count_reference < MIN_COUNT:
             return True
 
-        if count_b < MIN_COUNT:
+        if count_group < MIN_COUNT:
             return True
 
-        if support_a < min_support_diff and support_b < min_support_diff:
+        if support_reference < min_support_diff and support_group < min_support_diff:
             return True
 
         if parent1 is None or parent2 is None:
             return False
 
-        parent1_count_a = get_count(parent1, dfA)
-        parent1_support_a = parent1_count_a / total_a
-        parent1_count_b = get_count(parent1, dfB)
-        parent1_support_b = parent1_count_b / total_b
-        parent2_count_a = get_count(parent2, dfA)
-        parent2_support_a = parent2_count_a / total_a
-        parent2_count_b = get_count(parent2, dfB)
-        parent2_support_b = parent2_count_b / total_b
+        parent1_count_reference = get_count(parent1, 'reference')
+        parent1_support_reference = parent1_count_reference / total_reference
+        parent1_count_group = get_count(parent1, group_name)
+        parent1_support_group = parent1_count_group / total_groups[group_name]
+        parent2_count_reference = get_count(parent2, 'reference')
+        parent2_support_reference = parent2_count_reference / total_reference
+        parent2_count_group = get_count(parent2, group_name)
+        parent2_support_group = parent2_count_group / total_groups[group_name]
 
         # TODO: Add fixed relations pruning.
 
         # If there's no large change in the support of a set when extending the set, prune the node.
         threshold = min(0.01, min_support_diff / 2)
-        if (abs(parent1_support_a - support_a) < threshold and abs(parent1_support_b - support_b) < threshold) and\
-           (abs(parent2_support_a - support_a) < threshold and abs(parent2_support_b - support_b) < threshold):
+        if (abs(parent1_support_reference - support_reference) < threshold and abs(parent1_support_group - support_group) < threshold) and\
+           (abs(parent2_support_reference - support_reference) < threshold and abs(parent2_support_group - support_group) < threshold):
             return True
 
         # If there's no significative change, prune the node.
-        chi2, p1_a = scipy.stats.chisquare([parent1_count_a, count_a])
-        chi2, p2_a = scipy.stats.chisquare([parent2_count_a, count_a])
-        chi2, p1_b = scipy.stats.chisquare([parent1_count_b, count_b])
-        chi2, p2_b = scipy.stats.chisquare([parent2_count_b, count_b])
-        if p1_a > 0.05 and p2_a > 0.05 and p1_b > 0.05 and p2_b > 0.05:
+        chi2, p1_reference = scipy.stats.chisquare([parent1_count_reference, count_reference])
+        chi2, p2_reference = scipy.stats.chisquare([parent2_count_reference, count_reference])
+        chi2, p1_group = scipy.stats.chisquare([parent1_count_group, count_group])
+        chi2, p2_group = scipy.stats.chisquare([parent2_count_group, count_group])
+        if p1_reference > 0.05 and p2_reference > 0.05 and p1_group > 0.05 and p2_group > 0.05:
             return True
 
         return False
 
+    def count_candidates(candidates):
+        broadcastVar1 = sc.broadcast(set.union(*candidates.values()))
+        if signatures is not None:
+            broadcastVar2 = sc.broadcast(candidates)
+            results = dfReference.rdd.flatMap(lambda p: [(fset, 1) for fset in broadcastVar1.value if all(p[key] == value for key, value in fset)] + ([] if p['signature'] not in signatures else [((p['signature'], fset), 1) for fset in broadcastVar2.value[p['signature']] if all(p[key] == value for key, value in fset)])).reduceByKey(lambda x, y: x + y).filter(lambda (k, v): v >= MIN_COUNT).collect()
 
-    def count_candidates(df, candidates):
-        candidates_left = [c for c in candidates if not has_count(c, 'a' if df == dfA else 'b')]
-        # Initialize all results to 0.
-        for candidate in candidates_left:
-            save_count(candidate, 0, 'a' if df == dfA else 'b')
+            results_ref = [r for r in results if isinstance(r[0], frozenset)]
+            results_groups = dict([(signature, [(r[0][1], r[1]) for r in results if not isinstance(r[0], frozenset) and r[0][0] == signature]) for signature in signatures])
+        else:
+            results_ref = dfReference.rdd.flatMap(lambda p: [(fset, 1) for fset in broadcastVar1.value if all(p[key] == value for key, value in fset)]).reduceByKey(lambda x, y: x + y).filter(lambda (k, v): v >= MIN_COUNT).collect()
+            results_groups = []
+            for group in groups:
+                broadcastVar2 = sc.broadcast(candidates[group[0]])
+                results_groups.append((group[0], group[1].rdd.flatMap(lambda p: [(fset, 1) for fset in broadcastVar2.value if all(p[key] == value for key, value in fset)]).reduceByKey(lambda x, y: x + y).filter(lambda (k, v): v >= MIN_COUNT).collect()))
+            results_groups = dict(results_groups)
 
-        broadcastVar = sc.broadcast(candidates_left)
-        results = df.rdd.flatMap(lambda p: [(fset, 1) for fset in broadcastVar.value if all(p[key] == value for key, value in fset)]).reduceByKey(lambda x, y: x + y).collect()
+        save_results(results_ref, results_groups)
 
-        for result in results:
-            save_count(result[0], result[1], 'a' if df == dfA else 'b')
-
-        return [result[0] for result in results]
+        return results_groups
 
 
-    def generate_candidates(dfA, dfB, previous_candidates):
-        candidates = set()
+    def generate_candidates(previous_candidates):
+        candidates = {}
         parents = {}
 
-        for i in range(0, len(previous_candidates)):
-            for j in range(i + 1, len(previous_candidates)):
-                props = union(previous_candidates[i], previous_candidates[j])
-                if len(props) == len(previous_candidates[i]) + 1 and props not in candidates:
-                    candidates.add(props)
-                    parents[props] = (previous_candidates[i], previous_candidates[j])
+        for group_name in group_names:
+            candidates[group_name] = set()
+            parents[group_name] = {}
 
-        print(str(len(previous_candidates[0]) + 1) + ' CANDIDATES: ' + str(len(candidates)))
+            for i in range(0, len(previous_candidates[group_name])):
+                for j in range(i + 1, len(previous_candidates[group_name])):
+                    props = union(previous_candidates[group_name][i], previous_candidates[group_name][j])
+                    if len(props) == len(previous_candidates[group_name][i]) + 1 and props not in candidates[group_name]:
+                        candidates[group_name].add(props)
+                        parents[group_name][props] = (previous_candidates[group_name][i], previous_candidates[group_name][j])
 
-        results_a = count_candidates(dfA, candidates)
-        results_b = count_candidates(dfB, candidates)
+        print(str(len(previous_candidates[group_names[0]][0]) + 1) + ' CANDIDATES: ' + str(sum(len(candidates[group_name]) for group_name in group_names)))
 
-        return [result for result in results_b if not should_prune(parents[result][0], parents[result][1], result)]
+        results_groups = count_candidates(candidates)
+
+        return dict([(group_name, list(set([result[0] for result in results_groups[group_name] if not should_prune(group_name, parents[group_name][result[0]][0], parents[group_name][result[0]][1], result[0])]))) for group_name in group_names])
 
 
     candidates = {
-      1: [],
+      1: dict([(group_name, []) for group_name in group_names])
     }
 
     # Generate first level candidates.
-    results_a = get_cached_first_level_results('a', dfA.columns)
-    a_columns = [c for c in dfA.columns if c not in get_cached_columns('a', dfA.columns)]
-    broadcastVar = sc.broadcast(a_columns)
-    if len(a_columns) > 0:
-      results_a += dfA.rdd.flatMap(lambda p: [(frozenset([(key,p[key])]), 1) for key in broadcastVar.value]).reduceByKey(lambda x, y: x + y).collect()
+    results_ref = get_first_level_results('reference', dfReference.columns)
+    results_groups = dict([(group_name, get_first_level_results(group_name, dfReference.columns)) for group_name in group_names])
+    columns = [c for c in dfReference.columns if c not in get_columns('reference', dfReference.columns) and c != 'signature']
+    broadcastVar = sc.broadcast(columns)
+    if signatures is not None:
+        results = dfReference.rdd.flatMap(lambda p: [(frozenset([(key,p[key])]), 1) for key in broadcastVar.value] + ([] if p['signature'] not in signatures else [((p['signature'], frozenset([(key,p[key])])), 1) for key in broadcastVar.value])).reduceByKey(lambda x, y: x + y).filter(lambda (k, v): v >= MIN_COUNT).collect()
 
-    results_b = get_cached_first_level_results('b', dfB.columns)
-    b_columns = [c for c in dfB.columns if c not in get_cached_columns('b', dfB.columns)]
-    broadcastVar = sc.broadcast(b_columns)
-    if len(b_columns) > 0:
-      results_b += dfB.rdd.flatMap(lambda p: [(frozenset([(key,p[key])]), 1) for key in broadcastVar.value]).reduceByKey(lambda x, y: x + y).collect()
+        results_ref += [r for r in results if isinstance(r[0], frozenset)]
+        for group_name in group_names:
+            results_groups[group_name] += [(r[0][1], r[1]) for r in results if not isinstance(r[0], frozenset) and r[0][0] == group_name]
+    else:
+        results_ref += dfReference.rdd.flatMap(lambda p: [(frozenset([(key,p[key])]), 1) for key in broadcastVar.value]).reduceByKey(lambda x, y: x + y).filter(lambda (k, v): v >= MIN_COUNT).collect()
+        for group in groups:
+            results_groups[group[0]] += group[1].rdd.flatMap(lambda p: [(frozenset([(key,p[key])]), 1) for key in broadcastVar.value]).reduceByKey(lambda x, y: x + y).filter(lambda (k, v): v >= MIN_COUNT).collect()
 
-    for candidate in [count[0] for count in results_a + results_b]:
-        if not has_count(candidate, 'a'):
-            save_count(candidate, 0, 'a')
-        if not has_count(candidate, 'b'):
-            save_count(candidate, 0, 'b')
-    for count in results_a:
-        save_count(count[0], count[1], 'a')
-    for count in results_b:
-        save_count(count[0], count[1], 'b')
+    save_results(results_ref, results_groups)
+
 
     # Filter first level candidates.
-    candidates_tmp = set([count[0] for count in results_b if not should_prune(None, None, count[0])])
+    for group_name in group_names:
+        candidates[1][group_name] = set([element for element, count in results_groups[group_name] if not should_prune(group_name, None, None, element)])
+
+
     # Remove useless rules (e.g. addon_X=True and addon_X=False or is_garbage_collecting=1 and is_garbage_collecting=None).
-    for elem in candidates_tmp:
-        elem_key, elem_val = list(elem)[0]
+    def ignore_rule(candidate, candidates):
+        elem_key, elem_val = list(candidate)[0]
 
-        if elem_val == False and frozenset([(elem_key, True)]) in candidates_tmp:
-            continue
+        if elem_val == False and frozenset([(elem_key, True)]) in candidates:
+            return True
 
-        if elem_val == None and frozenset([(elem_key, u'1')]) in candidates_tmp:
-            continue
+        if elem_val == None and frozenset([(elem_key, u'1')]) in candidates:
+            return True
 
-        if elem_val == None and frozenset([(elem_key, u'Active')]) in candidates_tmp:
-            continue
+        if elem_val == None and frozenset([(elem_key, u'Active')]) in candidates:
+            return True
 
-        candidates[1].append(elem)
+        return False
 
-    print('1 RULES: ' + str(len(candidates[1])))
+    for group_name in group_names:
+        candidates[1][group_name] = [c for c in candidates[1][group_name] if not ignore_rule(c, candidates[1][group_name])]
+
+    print('1 RULES: ' + str(sum(len(candidates[1][group_name]) for group_name in group_names)))
+
 
     l = 1
-    while len(candidates[l]) > 0 and l < 2:
+    while sum(len(candidates[l][group_name]) for group_name in group_names) > 0 and l < 2:
         l += 1
-        candidates[l] = generate_candidates(dfA, dfB, candidates[l - 1])
-        print(str(l) + ' RULES: ' + str(len(candidates[l])))
+        candidates[l] = generate_candidates(candidates[l - 1])
+        print(str(l) + ' RULES: ' + str(sum(len(candidates[l][group_name]) for group_name in group_names)))
 
-    all_candidates = sum([candidates[i] for i in range(1,l+1)], [])
+
+    all_candidates = dict([(group_name, sum([candidates[i][group_name] for i in range(1,l+1)], [])) for group_name in group_names])
+
 
     alpha = 0.05
     alpha_k = alpha
-    results = []
-    for candidate in all_candidates:
-        count_a = get_count(candidate, 'a')
-        count_b = get_count(candidate, 'b')
-        support_a = count_a / total_a
-        support_b = count_b / total_b
+    results = {}
+    for group_name in group_names:
+        results[group_name] = []
 
-        # Discard element if the support in the subset is not different enough from the support in the entire dataset.
-        support_diff = abs(support_a - support_b)
-        if support_diff < min_support_diff:
-            continue
+        total_group = total_groups[group_name]
 
-        # Discard element if the support is almost the same as if the variables were independent.
-        if len(candidate) != 1:
-            # independent_support_a = reduce(operator.mul, [get_count(frozenset([item]), dfA) / total_a for item in candidate])
-            independent_support_b = reduce(operator.mul, [get_count(frozenset([item]), dfB) / total_b for item in candidate])
-            # if abs(independent_support_a - support_a) <= max(0.01, 0.15 * support_a) and abs(independent_support_b - support_b) <= max(0.01, 0.15 * support_b):
-            if abs(independent_support_b - support_b) <= max(0.01, 0.15 * support_b):
+        for candidate in all_candidates[group_name]:
+            count_reference = get_count(candidate, 'reference')
+            count_group = get_count(candidate, group_name)
+            support_reference = count_reference / total_reference
+            support_group = count_group / total_group
+
+            # Discard element if the support in the subset is not different enough from the support in the entire dataset.
+            support_diff = abs(support_reference - support_group)
+            if support_diff < min_support_diff:
                 continue
 
-        # Discard element if it is not significative.
-        chi2, p, dof, expected = scipy.stats.chi2_contingency([[count_b, count_a], [total_b - count_b, total_a - count_a]])
-        #oddsration, p = scipy.stats.fisher_exact([[count_b, count_a], [total_b - count_b, total_a - count_a]])
-        num_candidates = len(candidates[len(candidate)])
-        alpha_k = min((alpha / pow(2, len(candidate))) / num_candidates, alpha_k)
-        if p > alpha_k:
-            continue
+            # Discard element if the support is almost the same as if the variables were independent.
+            if len(candidate) != 1:
+                # independent_support_reference = reduce(operator.mul, [get_count(frozenset([item]), 'reference') / total_reference for item in candidate])
+                independent_support_group = reduce(operator.mul, [get_count(frozenset([item]), group_name) / total_group for item in candidate])
+                # if abs(independent_support_reference - support_reference) <= max(0.01, 0.15 * support_reference) and abs(independent_support_group - support_group) <= max(0.01, 0.15 * support_group):
+                if abs(independent_support_group - support_group) <= max(0.01, 0.15 * support_group):
+                    continue
 
-        phi = math.sqrt(chi2 / (total_a + total_b))
-        if phi < min_corr:
-            continue
+            # Discard element if it is not significative.
+            chi2, p, dof, expected = scipy.stats.chi2_contingency([[count_group, count_reference], [total_group - count_group, total_reference - count_reference]])
+            #oddsration, p = scipy.stats.fisher_exact([[count_group, count_reference], [total_group - count_group, total_reference - count_reference]])
+            num_candidates = len(candidates[len(candidate)][group_name])
+            alpha_k = min((alpha / pow(2, len(candidate))) / num_candidates, alpha_k)
+            if p > alpha_k:
+                continue
 
-        transformed_candidate = dict(candidate)
-        for key, val in candidate:
-            addon_or_error = key.replace('__DOT__', '.')
-            if addon_or_error in all_addons:
-                transformed_candidate['Addon "' + (addons.get_addon_name(addon_or_error) or addon_or_error) + '"'] = val
-                del transformed_candidate[key]
-            if key in all_gfx_critical_errors:
-                transformed_candidate['GFX_ERROR "' + addon_or_error + '"'] = val
-                del transformed_candidate[key]
+            phi = math.sqrt(chi2 / (total_reference + total_group))
+            if phi < min_corr:
+                continue
 
-        results.append({
-            'item': transformed_candidate,
-            'count_a': count_a,
-            'count_b': count_b,
-        })
+            transformed_candidate = dict(candidate)
+            for key, val in candidate:
+                addon_or_error = key.replace('__DOT__', '.')
+                if addon_or_error in all_addons:
+                    transformed_candidate['Addon "' + (addons.get_addon_name(addon_or_error) or addon_or_error) + '"'] = val
+                    del transformed_candidate[key]
+                if key in all_gfx_critical_errors:
+                    transformed_candidate['GFX_ERROR "' + addon_or_error + '"'] = val
+                    del transformed_candidate[key]
 
-
-    '''len1 = [result for result in results if len(result['item']) == 1]
-    others = [result for result in results if len(result['item']) > 1]
-
-    for result in sorted(len1, key=lambda v: (-abs(v['count_a'] / total_a - v['count_b'] / total_b))):
-        print(str(result['item']) + ' - ' + str(result['count_b'] / total_b) + ' - ' + str(result['count_a'] / total_a))
-
-    print('\n\n')
-
-    for result in sorted(others, key=lambda v: (-round(abs(v['count_a'] / total_a - v['count_b'] / total_b), 2), len(v['item']))):
-        print(str(result['item']) + ' - ' + str(result['count_b'] / total_b) + ' - ' + str(result['count_a'] / total_a))'''
+            results[group_name].append({
+                'item': transformed_candidate,
+                'count_reference': count_reference,
+                'count_group': count_group,
+            })
 
 
-    return results, total_a, total_b
+    return results, total_reference, total_groups
