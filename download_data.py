@@ -295,8 +295,7 @@ def get_top(number, versions, days, product='Firefox'):
         print(r.text)
         raise Exception(r)
 
-    # Ignore signatures with less than 5 reports.
-    return [signature['term'] for signature in r.json()['facets']['signature'] if signature['count'] >= 5]
+    return [signature['term'] for signature in r.json()['facets']['signature']]
 
 
 def get_versions(channel):

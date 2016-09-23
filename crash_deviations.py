@@ -64,6 +64,13 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
     total_groups = dict([(group[0], group[1].count()) for group in groups])
     group_names = [group[0] for group in groups]
 
+    for group_name in group_names:
+        if total_groups[group_name] < MIN_COUNT:
+            print(group_name + ' is too small: ' + str(total_groups[group_name]) + ' crash reports.')
+            group_names.remove(group_name)
+            if signatures is not None:
+                signatures.remove(group_name)
+
     def save_results(results_ref, results_groups):
         all_results = results_ref + sum(results_groups.values(), [])
 
