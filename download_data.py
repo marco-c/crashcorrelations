@@ -283,7 +283,7 @@ def get_top(number, versions, days, product='Firefox'):
 
     params = {
         'product': product,
-        'date': ['>=' + str(utc_today() - timedelta(days)), '<' + str(utc_today())],
+        'date': ['>=' + str(utc_today() - timedelta(days) + timedelta(1))],
         'version': versions,
         '_results_number': 0,
         '_facets_size': number,
