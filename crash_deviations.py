@@ -23,35 +23,6 @@ def get_crashes(sc, versions, days, product='Firefox'):
     return SQLContext(sc).read.format('json').load(download_data.get_paths(versions, days, product))
 
 
-saved_counts = {}
-
-
-def get_columns(df, columns):
-    global saved_counts
-    if df not in saved_counts:
-        return set()
-    return set([list(k)[0][0] for k in saved_counts[df].keys() if len(k) == 1 and list(k)[0][0] in columns])
-
-
-def get_first_level_results(df, columns):
-    global saved_counts
-    if df not in saved_counts:
-        return []
-    return [(k,v) for k,v in saved_counts[df].items() if len(k) == 1 and list(k)[0][0] in columns]
-
-
-def save_count(candidate, count, df):
-    global saved_counts
-    if df not in saved_counts:
-        saved_counts[df] = {}
-    saved_counts[df][candidate] = float(count)
-
-
-def get_count(candidate, df):
-    global saved_counts
-    return saved_counts[df][candidate]
-
-
 def find_deviations(sc, reference, groups=None, signatures=None, min_support_diff=0.15, min_corr=0.03, all_addons=None, all_gfx_critical_errors=None, analyze_addon_versions=False):
     if groups is None and signatures is None:
         raise Exception('Either groups or signatures should not be None')
@@ -70,6 +41,32 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
     group_names = [group_name for group_name, group_df in groups if group_name in total_groups and total_groups[group_name] >= MIN_COUNT]
     if signatures is not None:
         signatures = group_names
+
+
+    saved_counts = {}
+
+
+    def get_columns(df, columns):
+        if df not in saved_counts:
+            return set()
+        return set([list(k)[0][0] for k in saved_counts[df].keys() if len(k) == 1 and list(k)[0][0] in columns])
+
+
+    def get_first_level_results(df, columns):
+        if df not in saved_counts:
+            return []
+        return [(k,v) for k,v in saved_counts[df].items() if len(k) == 1 and list(k)[0][0] in columns]
+
+
+    def save_count(candidate, count, df):
+        if df not in saved_counts:
+            saved_counts[df] = {}
+        saved_counts[df][candidate] = float(count)
+
+
+    def get_count(candidate, df):
+        return saved_counts[df][candidate]
+
 
     def save_results(results_ref, results_groups):
         all_results = results_ref + sum(results_groups.values(), [])
