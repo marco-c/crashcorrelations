@@ -34,7 +34,7 @@ if __name__ == "__main__":
 
     results, total_reference, total_groups = crash_deviations.find_deviations(sc, df_a, signatures=args.signatures)
 
-    for signature in signatures:
+    for signature in args.signatures:
         print(signature)
 
         len1 = [result for result in results[signature] if len(result['item']) == 1]
