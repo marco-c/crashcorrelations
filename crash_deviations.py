@@ -364,25 +364,17 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
                 if abs(independent_support_group - support_group) <= max(0.01, 0.15 * support_group):
                     continue
 
-            try:
-                # Discard element if it is not significative.
-                chi2, p, dof, expected = scipy.stats.chi2_contingency([[count_group, count_reference], [total_group - count_group, total_reference - count_reference]])
-                #oddsration, p = scipy.stats.fisher_exact([[count_group, count_reference], [total_group - count_group, total_reference - count_reference]])
-                num_candidates = len(candidates[len(candidate)][group_name])
-                alpha_k = min((alpha / pow(2, len(candidate))) / num_candidates, alpha_k)
-                if p > alpha_k:
-                    continue
+            # Discard element if it is not significative.
+            chi2, p, dof, expected = scipy.stats.chi2_contingency([[count_group, count_reference], [total_group - count_group, total_reference - count_reference]])
+            #oddsration, p = scipy.stats.fisher_exact([[count_group, count_reference], [total_group - count_group, total_reference - count_reference]])
+            num_candidates = len(candidates[len(candidate)][group_name])
+            alpha_k = min((alpha / pow(2, len(candidate))) / num_candidates, alpha_k)
+            if p > alpha_k:
+                continue
 
-                phi = math.sqrt(chi2 / (total_reference + total_group))
-                if phi < min_corr:
-                    continue
-            except:
-                print(group_name)
-                print(candidate)
-                print(count_group)
-                print(total_group)
-                print(count_reference)
-                print(total_reference)
+            phi = math.sqrt(chi2 / (total_reference + total_group))
+            if phi < min_corr:
+                continue
 
             transformed_candidate = dict(candidate)
             for key, val in candidate:
