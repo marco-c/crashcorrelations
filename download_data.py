@@ -298,12 +298,12 @@ def get_top(number, versions, days, product='Firefox'):
     return [signature['term'] for signature in r.json()['facets']['signature']]
 
 
-def get_versions(channel):
+def get_versions(channel, product='Firefox'):
     channel = channel.lower()
     version = str(versions.get(base=True)[channel])
 
     r = get_with_retries('https://crash-stats.mozilla.com/api/ProductVersions', params={
-        'product': 'Firefox',
+        'product': product,
         'active': True,
         'is_rapid_beta': False,
     })
