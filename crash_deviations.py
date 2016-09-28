@@ -184,6 +184,7 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
             'graphics_critical_error',
             'addons',
             'uptime',
+            'date',
         ]])
 
     dfReference = drop_unneeded(augment(reference)).cache()
