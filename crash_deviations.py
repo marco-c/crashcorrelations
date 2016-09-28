@@ -14,6 +14,7 @@ from pyspark.sql.types import StringType
 import download_data
 import addons
 import gfx_critical_errors
+import app_notes
 
 
 MIN_COUNT = 5 # 5 for chi-squared test.
@@ -23,7 +24,7 @@ def get_crashes(sc, versions, days, product='Firefox'):
     return SQLContext(sc).read.format('json').load(download_data.get_paths(versions, days, product))
 
 
-def find_deviations(sc, reference, groups=None, signatures=None, min_support_diff=0.15, min_corr=0.03, all_addons=None, all_gfx_critical_errors=None, analyze_addon_versions=False):
+def find_deviations(sc, reference, groups=None, signatures=None, min_support_diff=0.15, min_corr=0.03, all_addons=None, all_gfx_critical_errors=None, all_app_notes=None, analyze_addon_versions=False):
     if groups is None and signatures is None:
         raise Exception('Either groups or signatures should not be None')
 
@@ -93,29 +94,39 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
                 save_count(element, count, group_name)
 
 
-    # Count graphics critical errors.
-    if all_gfx_critical_errors is None:
-        all_gfx_critical_errors = [error.replace('.', '__DOT__') for error in gfx_critical_errors.get_critical_errors()]
+    def count_substrings(substrings, field_name):
+        substrings = [substring.replace('.', '__DOT__') for substring in substrings]
 
         if signatures is not None:
-            found_errors = reference.select(['signature'] + [(functions.instr(reference['graphics_critical_error'], error.replace('__DOT__', '.')) != 0).alias(error) for error in all_gfx_critical_errors]).rdd.flatMap(lambda v: [(error, 1) for error in all_gfx_critical_errors if v[error]] + [((v['signature'], error), 1) for error in all_gfx_critical_errors if v[error] and v['signature'] in signatures]).reduceByKey(lambda x, y: x + y).collect()
+            found_substrings = reference.select(['signature'] + [(functions.instr(reference[field_name], substring.replace('__DOT__', '.')) != 0).alias(substring) for substring in substrings]).rdd.flatMap(lambda v: [(substring, 1) for substring in substrings if v[substring]] + [((v['signature'], substring), 1) for substring in substrings if v[substring] and v['signature'] in signatures]).reduceByKey(lambda x, y: x + y).collect()
 
-            errors_ref = [error for error in found_errors if isinstance(error[0], basestring)]
-            errors_signatures = [error for error in found_errors if not isinstance(error[0], basestring)]
-            errors_groups = dict([(signature, [(error, count) for (s, error), count in errors_signatures if s == signature]) for signature in signatures])
+            substrings_ref = [substring for substring in found_substrings if isinstance(substring[0], basestring)]
+            substrings_signatures = [substring for substring in found_substrings if not isinstance(substring[0], basestring)]
+            substrings_groups = dict([(signature, [(substring, count) for (s, substring), count in substrings_signatures if s == signature]) for signature in signatures])
         else:
-            errors_ref = reference.select([(functions.instr(reference['graphics_critical_error'], error.replace('__DOT__', '.')) != 0).alias(error) for error in all_gfx_critical_errors]).rdd.flatMap(lambda v: [(error, 1) for error in all_gfx_critical_errors if v[error]]).reduceByKey(lambda x, y: x + y).collect()
+            substrings_ref = reference.select([(functions.instr(reference[field_name], substring.replace('__DOT__', '.')) != 0).alias(substring) for substring in substrings]).rdd.flatMap(lambda v: [(substring, 1) for substring in substrings if v[substring]]).reduceByKey(lambda x, y: x + y).collect()
 
-            errors_groups = dict([(group[0], group[1].select([(functions.instr(reference['graphics_critical_error'], error.replace('__DOT__', '.')) != 0).alias(error) for error in all_gfx_critical_errors]).rdd.flatMap(lambda v: [(error, 1) for error in all_gfx_critical_errors if v[error]]).reduceByKey(lambda x, y: x + y).collect()) for group in groups])
+            substrings_groups = dict([(group[0], group[1].select([(functions.instr(reference[field_name], substring.replace('__DOT__', '.')) != 0).alias(substring) for substring in substrings]).rdd.flatMap(lambda v: [(substring, 1) for substring in substrings if v[substring]]).reduceByKey(lambda x, y: x + y).collect()) for group in groups])
 
-        save_results(errors_ref, errors_groups)
+        save_results(substrings_ref, substrings_groups)
 
-        all_gfx_critical_errors = set([error for error, count in errors_ref if float(count) / total_reference > min_support_diff] + [error for group_name in group_names for error, count in errors_groups[group_name] if float(count) / total_groups[group_name] > min_support_diff])
+        return set([substring for substring, count in substrings_ref if float(count) / total_reference > min_support_diff] + [substring for group_name in group_names for substring, count in substrings_groups[group_name] if float(count) / total_groups[group_name] > min_support_diff])
+
+
+    # Count app notes
+    if all_app_notes is None:
+        all_app_notes = count_substrings(app_notes.get_app_notes(), 'app_notes')
+
+
+    # Count graphics critical errors.
+    if all_gfx_critical_errors is None:
+        all_gfx_critical_errors = count_substrings(gfx_critical_errors.get_critical_errors(), 'graphics_critical_error')
+
 
     # Count addons.
     if all_addons is None:
         if signatures is not None:
-            # TODO: Only count addons for the signatures in the 'signatures' array, like we're doing with gfx errors
+            # TODO: Only count addons for the signatures in the 'signatures' array, like we're doing with gfx errors.
             found_addons = reference.select(['signature'] + [functions.explode(reference['addons']).alias('addon')]).rdd.zipWithIndex().filter(lambda (v, i): i % 2 == 0).flatMap(lambda (v, i): [(v, 1), (v['addon'], 1)]).reduceByKey(lambda x, y: x + y).collect()
 
             addons_ref = [addon for addon in found_addons if not isinstance(addon[0], Row)]
@@ -158,7 +169,7 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
             df = df.withColumn('plugin', df['plugin_version'].isNotNull())
 
         if 'app_notes' in df.columns:
-            df = df.withColumn('has dual GPUs', (functions.instr(df['app_notes'], 'Has dual GPUs') != 0))
+            df = df.select(['*'] + [(functions.instr(df['app_notes'], app_note.replace('__DOT__', '.')) != 0).alias(app_note) for app_note in all_app_notes] + [(functions.instr(df['app_notes'], 'Has dual GPUs') != 0).alias('has dual GPUs')])
 
         if 'graphics_critical_error' in df.columns:
             df = df.select(['*'] + [(functions.instr(df['graphics_critical_error'], error.replace('__DOT__', '.')) != 0).alias(error) for error in all_gfx_critical_errors])
@@ -384,6 +395,9 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
                     del transformed_candidate[key]
                 if key in all_gfx_critical_errors:
                     transformed_candidate['GFX_ERROR "' + addon_or_error + '"'] = val
+                    del transformed_candidate[key]
+                if key in all_app_notes:
+                    transformed_candidate['"' + addon_or_error + '" in app_notes'] = val
                     del transformed_candidate[key]
 
             results[group_name].append({
