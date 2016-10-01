@@ -34,18 +34,4 @@ if __name__ == "__main__":
 
     results, total_reference, total_groups = crash_deviations.find_deviations(sc, df_a, signatures=args.signatures)
 
-    for signature in args.signatures:
-        print(signature)
-
-        len1 = [result for result in results[signature] if len(result['item']) == 1]
-        others = [result for result in results[signature] if len(result['item']) > 1]
-
-        for result in sorted(len1, key=lambda v: (-abs(v['count_reference'] / total_reference - v['count_group'] / total_groups[signature]))):
-            print(str(result['item']) + ' - ' + str(result['count_group'] / total_groups[signature]) + ' - ' + str(result['count_reference'] / total_reference))
-
-        print('\n\n')
-
-        for result in sorted(others, key=lambda v: (-round(abs(v['count_reference'] / total_reference - v['count_group'] / total_groups[signature]), 2), len(v['item']))):
-            print(str(result['item']) + ' - ' + str(result['count_group'] / total_groups[signature]) + ' - ' + str(result['count_reference'] / total_reference))
-
-        print('\n\n\n')
+    crash_deviations.print_results(results, total_reference, total_groups)
