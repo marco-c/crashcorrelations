@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # This Source Code Form is subject to the terms of the Mozilla Public
 # License, v. 2.0. If a copy of the MPL was not distributed with this file,
 # You can obtain one at http://mozilla.org/MPL/2.0/.
@@ -409,3 +410,37 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
 
 
     return results, total_reference, total_groups
+
+
+def print_results(results, total_reference, total_groups):
+    def to_percentage(num):
+        result = "%.2f" % (num * 100)
+
+        if result == '100.00':
+            return '100.0'
+
+        if len(result[0:result.index('.')]) == 1:
+            return '0' + result
+
+        return result
+
+    def item_to_label(rule):
+        return u' ∧ '.join([unicode(key) + unicode('="') + unicode(str(value)) + unicode('"') for key, value in rule.items()])
+
+    def print_all(results):
+        for result in results:
+            print('(' + to_percentage(result['count_group'] / total_groups[group]) + ' in signature vs ' + to_percentage(result['count_reference'] / total_reference) + '% overall) ' + item_to_label(result['item']))
+
+    for group in results.keys():
+        print(group)
+
+        len1 = [result for result in results[group] if len(result['item']) == 1]
+        others = [result for result in results[group] if len(result['item']) > 1]
+
+        print_all(sorted(len1, key=lambda v: (-abs(v['count_reference'] / total_reference - v['count_group'] / total_groups[group]))))
+
+        print('\n\n')
+
+        print_all(sorted(others, key=lambda v: (-round(abs(v['count_reference'] / total_reference - v['count_group'] / total_groups[group]), 2), len(v['item']))))
+
+        print('\n\n\n')
