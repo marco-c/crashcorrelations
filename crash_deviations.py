@@ -444,7 +444,7 @@ def print_results(results, total_reference, total_groups):
         return result
 
     def item_to_label(rule):
-        return u' ∧ '.join([unicode(key) + unicode('="') + unicode(str(value)) + unicode('"') for key, value in rule.items()])
+        return u' ∧ '.join([key + '="' + str(value) + '"' for key, value in rule.items()]).encode('utf-8')
 
     def print_all(results):
         for result in results:
