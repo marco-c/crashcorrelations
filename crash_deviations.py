@@ -175,6 +175,23 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
         if 'graphics_critical_error' in df.columns:
             df = df.select(['*'] + [(functions.instr(df['graphics_critical_error'], error.replace('__DOT__', '.')) != 0).alias(error) for error in all_gfx_critical_errors])
 
+        if 'total_virtual_memory' in df.columns and 'platform_version' in df.columns:
+            def get_arch(total_virtual_memory, platform_version):
+                if total_virtual_memory:
+                    if int(total_virtual_memory) < 2684354560:
+                        return 'x86'
+                    elif int(total_virtual_memory) > 2684354560:
+                        return 'amd64'
+                else:
+                    if 'i686' in platform_version:
+                        return 'x86'
+                    elif 'x86_64' in platform_version:
+                        return 'amd64'
+
+            get_arch_udf = functions.udf(get_arch, StringType())
+
+            df = df.withColumn('os_arch', get_arch_udf(df['total_virtual_memory'], df['platform_version']))
+
         return df
 
 
