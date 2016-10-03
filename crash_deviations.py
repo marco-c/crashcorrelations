@@ -448,7 +448,7 @@ def print_results(results, total_reference, total_groups):
 
     def print_all(results):
         for result in results:
-            print('(' + to_percentage(result['count_group'] / total_groups[group]) + ' in signature vs ' + to_percentage(result['count_reference'] / total_reference) + '% overall) ' + item_to_label(result['item']))
+            print('(' + to_percentage(result['count_group'] / total_groups[group]) + '% in signature vs ' + to_percentage(result['count_reference'] / total_reference) + '% overall) ' + item_to_label(result['item']))
 
     for group in results.keys():
         print(group)
