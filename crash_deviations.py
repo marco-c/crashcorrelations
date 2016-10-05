@@ -351,6 +351,10 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
         if elem_val == None and frozenset([(elem_key, u'Active')]) in candidates:
             return True
 
+        # We only care when submitted_from_infobar is true.
+        if elem_key == 'submitted_from_infobar' and elem_val is None:
+            return True
+
         return False
 
     for group_name in group_names:
