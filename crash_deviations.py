@@ -265,9 +265,8 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
         # TODO: Add fixed relations pruning.
 
         # If there's no large change in the support of a set when extending the set, prune the node.
-        threshold = min(0.01, min_support_diff / 2)
-        if (abs(parent1_support_reference - support_reference) < threshold and abs(parent1_support_group - support_group) < threshold) and\
-           (abs(parent2_support_reference - support_reference) < threshold and abs(parent2_support_group - support_group) < threshold):
+        threshold = min(0.05, min_support_diff / 2)
+        if (abs(parent1_support_reference - support_reference) < threshold or abs(parent2_support_reference - support_reference) < threshold) and (abs(parent1_support_group - support_group) < threshold or abs(parent2_support_group - support_group) < threshold):
             return True
 
         # If there's no significative change, prune the node.
@@ -275,7 +274,7 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
         chi2, p2_reference = scipy.stats.chisquare([parent2_count_reference, count_reference])
         chi2, p1_group = scipy.stats.chisquare([parent1_count_group, count_group])
         chi2, p2_group = scipy.stats.chisquare([parent2_count_group, count_group])
-        if p1_reference > 0.05 and p2_reference > 0.05 and p1_group > 0.05 and p2_group > 0.05:
+        if (p1_reference > 0.05 or p2_reference > 0.05) and (p1_group > 0.05 or p2_group > 0.05):
             return True
 
         return False
