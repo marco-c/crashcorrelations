@@ -444,10 +444,10 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
                     del dict_candidate[key]
                 elif key in all_gfx_critical_errors:
                     dict_candidate['GFX_ERROR "' + addon_or_error + '"'] = val
-                    del dict_candididate[key]
+                    del dict_candidate[key]
                 elif key in all_app_notes:
                     dict_candidate['"' + addon_or_error + '" in app_notes'] = val
-                    del dict_candididate[key]
+                    del dict_candidate[key]
                 elif key == 'adapter_vendor_id':
                     dict_candidate[key] = pciids.get_vendor_name(val)
                 elif key == 'adapter_device_id' and 'adapter_vendor_id' in transformed_candidate:
