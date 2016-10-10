@@ -100,7 +100,7 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
         substrings = [substring.replace('.', '__DOT__') for substring in substrings]
 
         if signatures is not None:
-            found_substrings = reference.select(['signature'] + [(functions.instr(reference[field_name], substring.replace('__DOT__', '.')) != 0).alias(substring) for substring in substrings]).rdd.flatMap(lambda v: [(substring, 1) for substring in substrings if v[substring]] + [((v['signature'], substring), 1) for substring in substrings if v[substring] and v['signature'] in signatures]).reduceByKey(lambda x, y: x + y).collect()
+            found_substrings = reference.select(['signature'] + [(functions.instr(reference[field_name], substring.replace('__DOT__', '.')) != 0).alias(substring) for substring in substrings]).rdd.flatMap(lambda v: [(substring, 1) for substring in substrings if v[substring]] + ([] if v['signature'] not in signatures else [((v['signature'], substring), 1) for substring in substrings if v[substring]])).reduceByKey(lambda x, y: x + y).collect()
 
             substrings_ref = [substring for substring in found_substrings if isinstance(substring[0], basestring)]
             substrings_signatures = [substring for substring in found_substrings if not isinstance(substring[0], basestring)]
