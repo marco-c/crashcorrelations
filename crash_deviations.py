@@ -128,8 +128,7 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
     # Count addons.
     if all_addons is None:
         if signatures is not None:
-            # TODO: Only count addons for the signatures in the 'signatures' array, like we're doing with gfx errors.
-            found_addons = reference.select(['signature'] + [functions.explode(reference['addons']).alias('addon')]).rdd.zipWithIndex().filter(lambda (v, i): i % 2 == 0).flatMap(lambda (v, i): [(v, 1), (v['addon'], 1)]).reduceByKey(lambda x, y: x + y).collect()
+            found_addons = reference.select(['signature'] + [functions.explode(reference['addons']).alias('addon')]).rdd.zipWithIndex().filter(lambda (v, i): i % 2 == 0).flatMap(lambda (v, i): [(v, 1), (v['addon'], 1)] if v['signature'] in signatures else [(v['addon'], 1)]).reduceByKey(lambda x, y: x + y).collect()
 
             addons_ref = [addon for addon in found_addons if not isinstance(addon[0], Row)]
             addons_signatures = [addon for addon in found_addons if isinstance(addon[0], Row)]
