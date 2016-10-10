@@ -1,6 +1,11 @@
+from datetime import datetime
 import requests
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
+
+
+def utc_today():
+    return datetime.utcnow().date()
 
 
 def get_with_retries(url, params=None, headers=None):

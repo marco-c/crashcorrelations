@@ -5,8 +5,7 @@
 import os
 import json
 from urlparse import urlparse
-from datetime import datetime, timedelta
-import shutil
+from datetime import timedelta
 
 import boto3
 import botocore
@@ -18,10 +17,6 @@ import versions
 
 
 SCHEMA_VERSION = '3'
-
-
-def utc_today():
-    return datetime.utcnow().date()
 
 
 __token = ''
@@ -56,12 +51,12 @@ def clean_old_data():
         bucket = boto3.resource('s3').Bucket('net-mozaws-prod-us-west-2-pipeline-analysis')
 
         for key in bucket.objects.filter(Prefix='marco/crashcorrelations_data'):
-            if 'schema_version' not in key.key and (old_schema != SCHEMA_VERSION or dateutil.parser.parse(key.key[-15:-5]).date() < utc_today() - timedelta(MAX_AGE)):
+            if 'schema_version' not in key.key and (old_schema != SCHEMA_VERSION or dateutil.parser.parse(key.key[-15:-5]).date() < utils.utc_today() - timedelta(MAX_AGE)):
                 key.delete()
     else:
         for root, dirs, files in os.walk('crashcorrelations_data'):
             for name in files:
-                if 'schema_version' not in name and (old_schema != SCHEMA_VERSION or dateutil.parser.parse(name[-15:-5]).date() < utc_today() - timedelta(MAX_AGE)):
+                if 'schema_version' not in name and (old_schema != SCHEMA_VERSION or dateutil.parser.parse(name[-15:-5]).date() < utils.utc_today() - timedelta(MAX_AGE)):
                     os.remove(os.path.join('crashcorrelations_data', name))
 
 
@@ -146,7 +141,7 @@ def download_day_crashes(version, day, product='Firefox'):
     while not finished:
         params = {
             'product': product,
-            'date': ['>=' + str(day), '<' + str(day + timedelta(1))] if day != utc_today() else '>=' + str(day),
+            'date': ['>=' + str(day), '<' + str(day + timedelta(1))] if day != utils.utc_today() else '>=' + str(day),
             'version': version,
             '_columns': [
                 'abort_message',
@@ -256,11 +251,11 @@ def download_crashes(versions, days, product='Firefox'):
 
     for i in range(0, days):
         for version in versions:
-            download_day_crashes(version, utc_today() - timedelta(i), product)
+            download_day_crashes(version, utils.utc_today() - timedelta(i), product)
 
 
 def get_paths(versions, days, product='Firefox'):
-    last_day = utc_today()
+    last_day = utils.utc_today()
     path = get_path(versions[0], last_day, product)
     if not exists(path):
         last_day -= timedelta(1)
@@ -273,7 +268,7 @@ def get_top(number, versions, days, product='Firefox'):
 
     params = {
         'product': product,
-        'date': ['>=' + str(utc_today() - timedelta(days) + timedelta(1))],
+        'date': ['>=' + str(utils.utc_today() - timedelta(days) + timedelta(1))],
         'version': versions,
         '_results_number': 0,
         '_facets_size': number,
