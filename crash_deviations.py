@@ -207,6 +207,23 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
 
             df = df.withColumn('os_arch', get_arch_udf(df['total_virtual_memory'], df['platform'], df['platform_version']))
 
+        if 'adapter_driver_version' in df.columns:
+            def get_driver_version(adapter_vendor_id, adapter_driver_version):
+                # XXX: Sometimes we have a driver which is not actually made by the vendor,
+                #      in those cases these rules are not valid (e.g. 6.1.7600.16385).
+                if adapter_driver_version:
+                    if adapter_vendor_id == '0x8086' or adapter_vendor_id == '8086':
+                        return adapter_driver_version[adapter_driver_version.rfind('.')+1:]
+                    elif adapter_vendor_id == '0x10de' or adapter_vendor_id == '10de':
+                        return adapter_driver_version[-6:-5] + adapter_driver_version[-4:-2] + '.' + adapter_driver_version[-2:]
+                    # TODO: AMD?
+
+                return adapter_driver_version
+
+            get_driver_version_udf = functions.udf(get_driver_version, StringType())
+
+            df = df.withColumn('adapter_driver_version_clean', get_driver_version_udf(df['adapter_vendor_id'], df['adapter_driver_version']))
+
         return df
 
 
