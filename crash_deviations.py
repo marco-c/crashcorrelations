@@ -16,6 +16,7 @@ import download_data
 import addons
 import gfx_critical_errors
 import app_notes
+import pciids
 
 
 MIN_COUNT = 5 # 5 for chi-squared test.
@@ -451,20 +452,25 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
             ci = calculate_ci(support_group, total_group, support_reference, total_reference)
 
             transformed_candidate = dict(candidate)
+            dict_candidate = transformed_candidate.copy()
             for key, val in candidate:
                 addon_or_error = key.replace('__DOT__', '.')
                 if addon_or_error in all_addons:
-                    transformed_candidate['Addon "' + (addons.get_addon_name(addon_or_error) or addon_or_error) + '"'] = val
-                    del transformed_candidate[key]
-                if key in all_gfx_critical_errors:
-                    transformed_candidate['GFX_ERROR "' + addon_or_error + '"'] = val
-                    del transformed_candidate[key]
-                if key in all_app_notes:
-                    transformed_candidate['"' + addon_or_error + '" in app_notes'] = val
-                    del transformed_candidate[key]
+                    dict_candidate['Addon "' + (addons.get_addon_name(addon_or_error) or addon_or_error) + '"'] = val
+                    del dict_candidate[key]
+                elif key in all_gfx_critical_errors:
+                    dict_candidate['GFX_ERROR "' + addon_or_error + '"'] = val
+                    del dict_candididate[key]
+                elif key in all_app_notes:
+                    dict_candidate['"' + addon_or_error + '" in app_notes'] = val
+                    del dict_candididate[key]
+                elif key == 'adapter_vendor_id':
+                    dict_candidate[key] = pciids.get_vendor_name(val)
+                elif key == 'adapter_device_id' and 'adapter_vendor_id' in transformed_candidate:
+                    dict_candidate[key] = pciids.get_device_name(transformed_candidate['adapter_vendor_id'], val)
 
             results[group_name].append({
-                'item': transformed_candidate,
+                'item': dict_candidate,
                 'count_reference': count_reference,
                 'count_group': count_group,
                 'ci': ci,
