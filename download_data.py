@@ -6,9 +6,6 @@ import os
 import json
 from urlparse import urlparse
 from datetime import datetime, timedelta
-import requests
-from requests.adapters import HTTPAdapter
-from requests.packages.urllib3.util.retry import Retry
 import shutil
 
 import boto3
