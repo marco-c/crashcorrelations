@@ -22,19 +22,6 @@ import pciids
 MIN_COUNT = 5 # 5 for chi-squared test.
 
 
-def calculate_ci(prop1, total1, prop2, total2):
-    diff = prop1 - prop2
-
-    # Wald 95% confidence interval for the difference between the proportions.
-    standard_error = math.sqrt(prop1 * (1 - prop1) / total1 + prop2 * (1 - prop2) / total2)
-    ci = (diff - 1.96 * standard_error, diff + 1.96 * standard_error)
-
-    # Yates continuity correction for the confidence interval.
-    correction = 0.5 * (1.0 / total1 + 1.0 / total2)
-
-    return (ci[0] - correction, ci[1] + correction)
-
-
 def get_crashes(sc, versions, days, product='Firefox'):
     return SQLContext(sc).read.format('json').load(download_data.get_paths(versions, days, product))
 
@@ -449,8 +436,6 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
             if phi < min_corr:
                 continue
 
-            ci = calculate_ci(support_group, total_group, support_reference, total_reference)
-
             transformed_candidate = dict(candidate)
             dict_candidate = transformed_candidate.copy()
             for key, val in candidate:
@@ -473,7 +458,6 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
                 'item': dict_candidate,
                 'count_reference': count_reference,
                 'count_group': count_group,
-                'ci': ci,
             })
 
 
