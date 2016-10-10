@@ -1,6 +1,8 @@
 import requests
 import re
 
+import utils
+
 __pciids = {}
 
 def __get_ids():
@@ -17,7 +19,7 @@ def __get_ids():
 def __get_data_from_pciids():
     global __pciids
 
-    r = requests.get('https://raw.githubusercontent.com/pciutils/pciids/master/pci.ids')
+    r = utils.get_with_retries('https://raw.githubusercontent.com/pciutils/pciids/master/pci.ids')
 
     data = r.text.split('\n')
 
@@ -46,7 +48,7 @@ def __get_data_from_pciids():
 def __get_data_from_pcidatabase():
     global __pciids
 
-    r = requests.get('http://pcidatabase.com/reports.php?type=csv')
+    r = utils.get_with_retries('http://pcidatabase.com/reports.php?type=csv')
 
     data = r.text.split('\n')
 

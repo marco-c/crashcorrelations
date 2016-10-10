@@ -15,6 +15,7 @@ import boto3
 import botocore
 import dateutil.parser
 
+import utils
 import config
 import versions
 
@@ -131,15 +132,6 @@ def write_json(path, data):
         upload(path)
 
 
-def get_with_retries(url, params=None, headers=None):
-    retries = Retry(total=16, backoff_factor=1, status_forcelist=[429])
-
-    s = requests.Session()
-    s.mount('https://crash-stats.mozilla.com', HTTPAdapter(max_retries=retries))
-
-    return s.get(url, params=params, headers=headers)
-
-
 def download_day_crashes(version, day, product='Firefox'):
     crashes = []
 
@@ -220,7 +212,7 @@ def download_day_crashes(version, day, product='Firefox'):
             headers['Auth-Token'] = token
 
         print(str(version) + ' - ' + str(day) + ' - ' + str(len(crashes)))
-        r = get_with_retries(url, params=params, headers=headers)
+        r = utils.get_with_retries(url, params=params, headers=headers)
 
         if r.status_code != 200:
             print(r.text)
@@ -290,7 +282,7 @@ def get_top(number, versions, days, product='Firefox'):
         '_facets_size': number,
     }
 
-    r = get_with_retries(url, params=params)
+    r = utils.get_with_retries(url, params=params)
 
     if r.status_code != 200:
         print(r.text)
@@ -303,7 +295,7 @@ def get_versions(channel, product='Firefox'):
     channel = channel.lower()
     version = str(versions.get(base=True)[channel])
 
-    r = get_with_retries('https://crash-stats.mozilla.com/api/ProductVersions', params={
+    r = utils.get_with_retries('https://crash-stats.mozilla.com/api/ProductVersions', params={
         'product': product,
         'active': True,
         'is_rapid_beta': False,
