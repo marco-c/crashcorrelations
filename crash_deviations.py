@@ -412,6 +412,13 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
                 if abs(independent_support_group - support_group) <= max(0.01, 0.15 * support_group):
                     continue
 
+                # TODO: Don't assume just two elements.
+                elem1 = [get_count(frozenset([item]), group_name) for item in candidate][0]
+                elem2 = [get_count(frozenset([item]), group_name) for item in candidate][1]
+                oddsratio, p = scipy.stats.fisher_exact([[count_group, total_group - elem1], [total_group - elem2, total_group - count_group]])
+                if p > alpha_k:
+                    continue
+
             # Discard element if it is not significative.
             chi2, p, dof, expected = scipy.stats.chi2_contingency([[count_group, count_reference], [total_group - count_group, total_reference - count_reference]])
             #oddsration, p = scipy.stats.fisher_exact([[count_group, count_reference], [total_group - count_group, total_reference - count_reference]])
