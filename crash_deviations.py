@@ -163,9 +163,6 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
             else:
                 df = df.select(['*'] + [functions.array_contains(df['addons'], addon).alias(addon.replace('.', '__DOT__')) for addon in all_addons])
 
-        if 'uptime' in df.columns:
-            df = df.withColumn('startup', df['uptime'] < 60)
-
         if 'plugin_version' in df.columns:
             df = df.withColumn('plugin', df['plugin_version'].isNotNull())
 
@@ -220,7 +217,6 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
             'app_notes',
             'graphics_critical_error',
             'addons',
-            'uptime',
             'date',
         ]])
 
