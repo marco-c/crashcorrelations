@@ -182,6 +182,7 @@ def download_day_crashes(version, day, product='Firefox'):
                 'platform_version',
                 'plugin_version',
                 'reason',
+                'safe_mode',
                 'shutdown_progress',
                 'signature',
                 'submitted_from_infobar',
