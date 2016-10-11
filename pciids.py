@@ -104,12 +104,18 @@ def __mk_id(pciid):
     return ''
 
 def get_vendor_name(vendorID):
+    if not vendorID:
+        return vendorID
+
     vendor = __get_ids().get(__mk_id(vendorID), None)
     if vendor:
         return vendor['name']
     return vendorID
 
 def get_device_name(vendorID, deviceID):
+    if not vendorID or not deviceID:
+        return deviceID
+
     vendor = __get_ids().get(__mk_id(vendorID), None)
     if vendor:
         desc = vendor['devices'].get(__mk_id(deviceID), None)
