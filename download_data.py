@@ -16,7 +16,7 @@ import config
 import versions
 
 
-SCHEMA_VERSION = '3'
+SCHEMA_VERSION = '4'
 
 
 __token = ''
@@ -161,6 +161,7 @@ def download_day_crashes(version, day, product='Firefox'):
                 'contains_memory_report',
                 'cpu_arch',
                 'cpu_info',
+                'cpu_microcode_version',
                 'date',
                 'dom_ipc_enabled',
                 'gmp_plugin',
