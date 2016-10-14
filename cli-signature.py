@@ -8,7 +8,6 @@ from pyspark import SparkContext
 
 import download_data
 import crash_deviations
-import plot
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Signature Correlations')
