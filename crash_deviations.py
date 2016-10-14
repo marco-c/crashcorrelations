@@ -293,16 +293,16 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
         broadcastVar1 = sc.broadcast(set.union(*candidates.values()))
         if signatures is not None:
             broadcastVar2 = sc.broadcast(candidates)
-            results = dfReference.rdd.flatMap(lambda p: [(fset, 1) for fset in broadcastVar1.value if all(p[key] == value for key, value in fset)] + ([] if p['signature'] not in signatures else [((p['signature'], fset), 1) for fset in broadcastVar2.value[p['signature']] if all(p[key] == value for key, value in fset)])).reduceByKey(lambda x, y: x + y).filter(lambda (k, v): v >= MIN_COUNT).collect()
+            results = dfReference.rdd.map(lambda p: (p['signature'], set(p.asDict().iteritems()))).flatMap(lambda p: [(fset, 1) for fset in broadcastVar1.value if len(p[1] & fset) == len(fset)] + ([] if p[0] not in signatures else [((p[0], fset), 1) for fset in broadcastVar2.value[p[0]] if len(p[1] & fset) == len(fset)])).reduceByKey(lambda x, y: x + y).filter(lambda (k, v): v >= MIN_COUNT).collect()
 
             results_ref = [r for r in results if isinstance(r[0], frozenset)]
             results_groups = dict([(signature, [(r[0][1], r[1]) for r in results if not isinstance(r[0], frozenset) and r[0][0] == signature]) for signature in signatures])
         else:
-            results_ref = dfReference.rdd.flatMap(lambda p: [(fset, 1) for fset in broadcastVar1.value if all(p[key] == value for key, value in fset)]).reduceByKey(lambda x, y: x + y).filter(lambda (k, v): v >= MIN_COUNT).collect()
+            results_ref = dfReference.rdd.map(lambda p: (p['signature'], set(p.asDict().iteritems()))).flatMap(lambda p: [(fset, 1) for fset in broadcastVar1.value if len(p[1] & fset) == len(fset)]).reduceByKey(lambda x, y: x + y).filter(lambda (k, v): v >= MIN_COUNT).collect()
             results_groups = []
             for group in groups:
                 broadcastVar2 = sc.broadcast(candidates[group[0]])
-                results_groups.append((group[0], group[1].rdd.flatMap(lambda p: [(fset, 1) for fset in broadcastVar2.value if all(p[key] == value for key, value in fset)]).reduceByKey(lambda x, y: x + y).filter(lambda (k, v): v >= MIN_COUNT).collect()))
+                results_groups.append((group[0], group[1].rdd.map(lambda p: (p['signature'], set(p.asDict().iteritems()))).flatMap(lambda p: [(fset, 1) for fset in broadcastVar2.value if len(p[1] & fset) == len(fset)]).reduceByKey(lambda x, y: x + y).filter(lambda (k, v): v >= MIN_COUNT).collect()))
             results_groups = dict(results_groups)
 
         save_results(results_ref, results_groups)
