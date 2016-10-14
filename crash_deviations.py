@@ -8,6 +8,7 @@ import operator
 from collections import defaultdict
 import scipy.stats
 import math
+import time
 
 from pyspark.sql import SQLContext, Row, functions
 from pyspark.sql.types import StringType
@@ -117,16 +118,24 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
 
     # Count app notes
     if all_app_notes is None:
+        print('Counting app_notes...')
+        t = time.time()
         all_app_notes = count_substrings(app_notes.get_app_notes(), 'app_notes')
+        print('[DONE ' + str(time.time() - t) + ']\n')
 
 
     # Count graphics critical errors.
     if all_gfx_critical_errors is None:
+        print('Counting graphics_critical_errors...')
+        t = time.time()
         all_gfx_critical_errors = count_substrings(gfx_critical_errors.get_critical_errors(), 'graphics_critical_error')
+        print('[DONE ' + str(time.time() - t) + ']\n')
 
 
     # Count addons.
     if all_addons is None:
+        print('Counting addons...')
+        t = time.time()
         if signatures is not None:
             found_addons = reference.select(['signature'] + [functions.explode(reference['addons']).alias('addon')]).rdd.zipWithIndex().filter(lambda (v, i): i % 2 == 0).flatMap(lambda (v, i): [(v, 1), (v['addon'], 1)] if v['signature'] in signatures else [(v['addon'], 1)]).reduceByKey(lambda x, y: x + y).collect()
 
@@ -141,6 +150,7 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
         save_results(addons_ref, addons_groups)
 
         all_addons = set([addon for addon, count in addons_ref if float(count) / total_reference > min_support_diff] + [addon for group_name in group_names for addon, count in addons_groups[group_name] if float(count) / total_groups[group_name] > min_support_diff])
+        print('[DONE ' + str(time.time() - t) + ']\n')
 
 
     def augment(df):
@@ -301,8 +311,13 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
 
 
     def generate_candidates(previous_candidates):
+        level = len(previous_candidates[group_names[0]][0]) + 1
+
         candidates = {}
         parents = {}
+
+        print('Generating level-' + str(level) + ' candidates...')
+        t = time.time()
 
         for group_name in group_names:
             candidates[group_name] = set()
@@ -311,22 +326,32 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
             for i in range(0, len(previous_candidates[group_name])):
                 for j in range(i + 1, len(previous_candidates[group_name])):
                     props = union(previous_candidates[group_name][i], previous_candidates[group_name][j])
-                    if len(props) == len(previous_candidates[group_name][i]) + 1 and props not in candidates[group_name]:
+                    if len(props) == level and props not in candidates[group_name]:
                         candidates[group_name].add(props)
                         parents[group_name][props] = (previous_candidates[group_name][i], previous_candidates[group_name][j])
 
-        print(str(len(previous_candidates[group_names[0]][0]) + 1) + ' CANDIDATES: ' + str(sum(len(candidates[group_name]) for group_name in group_names)))
+        print('[DONE ' + str(time.time() - t) + ']\n')
+        print(str(level) + ' CANDIDATES: ' + str(sum(len(candidates[group_name]) for group_name in group_names)))
 
+        print('Counting level-' + str(level) + ' candidates...')
+        t = time.time()
         results_groups = count_candidates(candidates)
+        print('[DONE ' + str(time.time() - t) + ']\n')
 
-        return dict([(group_name, list(set([result[0] for result in results_groups[group_name] if not should_prune(group_name, parents[group_name][result[0]][0], parents[group_name][result[0]][1], result[0])]))) for group_name in group_names])
+        print('Filtering level-' + str(level) + ' candidates...')
+        t = time.time()
+        filtered_candidates = dict([(group_name, list(set([result[0] for result in results_groups[group_name] if not should_prune(group_name, parents[group_name][result[0]][0], parents[group_name][result[0]][1], result[0])]))) for group_name in group_names])
+        print('[DONE ' + str(time.time() - t) + ']\n')
 
+        return filtered_candidates
 
     candidates = {
       1: dict([(group_name, []) for group_name in group_names])
     }
 
     # Generate first level candidates.
+    print('Counting first level candidates...')
+    t = time.time()
     results_ref = get_first_level_results('reference', dfReference.columns)
     results_groups = dict([(group_name, get_first_level_results(group_name, dfReference.columns)) for group_name in group_names])
     columns = [c for c in dfReference.columns if c not in get_columns('reference', dfReference.columns) and c != 'signature']
@@ -343,9 +368,12 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
             results_groups[group[0]] += group[1].rdd.flatMap(lambda p: [(frozenset([(key,p[key])]), 1) for key in broadcastVar.value]).reduceByKey(lambda x, y: x + y).filter(lambda (k, v): v >= MIN_COUNT).collect()
 
     save_results(results_ref, results_groups)
+    print('[DONE ' + str(time.time() - t) + ']\n')
 
 
     # Filter first level candidates.
+    print('Filtering first level candidates...')
+    t = time.time()
     for group_name in group_names:
         candidates[1][group_name] = set([element for element, count in results_groups[group_name] if not should_prune(group_name, None, None, element)])
 
@@ -372,6 +400,7 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
     for group_name in group_names:
         candidates[1][group_name] = [c for c in candidates[1][group_name] if not ignore_rule(c, candidates[1][group_name])]
 
+    print('[DONE ' + str(time.time() - t) + ']\n')
     print('1 RULES: ' + str(sum(len(candidates[1][group_name]) for group_name in group_names)))
 
 
@@ -385,6 +414,8 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
     all_candidates = dict([(group_name, sum([candidates[i][group_name] for i in range(1,l+1)], [])) for group_name in group_names])
 
 
+    print('Final rules filtering...')
+    t = time.time()
     alpha = 0.05
     alpha_k = alpha
     results = {}
@@ -455,6 +486,7 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
                 'count_group': count_group,
             })
 
+    print('[DONE ' + str(time.time() - t) + ']\n')
 
     return results, total_reference, total_groups
 
