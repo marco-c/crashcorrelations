@@ -42,7 +42,7 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
             print(group_name + ' is too small: ' + str(total_groups[group_name]) + ' crash reports.')
 
     total_reference = reference.count()
-    group_names = [group_name for group_name, group_df in groups if group_name in total_groups and total_groups[group_name] >= MIN_COUNT]
+    group_names = set([group_name for group_name, group_df in groups if group_name in total_groups and total_groups[group_name] >= MIN_COUNT])
     if signatures is not None:
         signatures = group_names
 
