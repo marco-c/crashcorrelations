@@ -289,20 +289,20 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
 
         return False
 
-    def count_candidates(candidates):
+    def count_candidates(candidates, level):
         broadcastVar1 = sc.broadcast(set.union(*candidates.values()))
         if signatures is not None:
             broadcastVar2 = sc.broadcast(candidates)
-            results = dfReference.rdd.map(lambda p: (p['signature'], set(p.asDict().iteritems()))).flatMap(lambda p: [(fset, 1) for fset in broadcastVar1.value if len(p[1] & fset) == len(fset)] + ([] if p[0] not in signatures else [((p[0], fset), 1) for fset in broadcastVar2.value[p[0]] if len(p[1] & fset) == len(fset)])).reduceByKey(lambda x, y: x + y).filter(lambda (k, v): v >= MIN_COUNT).collect()
+            results = dfReference.rdd.map(lambda p: (p['signature'], set(p.asDict().iteritems()))).flatMap(lambda p: [(fset, 1) for fset in broadcastVar1.value if len(p[1] & fset) == level] + ([] if p[0] not in signatures else [((p[0], fset), 1) for fset in broadcastVar2.value[p[0]] if len(p[1] & fset) == level])).reduceByKey(lambda x, y: x + y).filter(lambda (k, v): v >= MIN_COUNT).collect()
 
             results_ref = [r for r in results if isinstance(r[0], frozenset)]
             results_groups = dict([(signature, [(r[0][1], r[1]) for r in results if not isinstance(r[0], frozenset) and r[0][0] == signature]) for signature in signatures])
         else:
-            results_ref = dfReference.rdd.map(lambda p: (p['signature'], set(p.asDict().iteritems()))).flatMap(lambda p: [(fset, 1) for fset in broadcastVar1.value if len(p[1] & fset) == len(fset)]).reduceByKey(lambda x, y: x + y).filter(lambda (k, v): v >= MIN_COUNT).collect()
+            results_ref = dfReference.rdd.map(lambda p: (p['signature'], set(p.asDict().iteritems()))).flatMap(lambda p: [(fset, 1) for fset in broadcastVar1.value if len(p[1] & fset) == level]).reduceByKey(lambda x, y: x + y).filter(lambda (k, v): v >= MIN_COUNT).collect()
             results_groups = []
             for group in groups:
                 broadcastVar2 = sc.broadcast(candidates[group[0]])
-                results_groups.append((group[0], group[1].rdd.map(lambda p: (p['signature'], set(p.asDict().iteritems()))).flatMap(lambda p: [(fset, 1) for fset in broadcastVar2.value if len(p[1] & fset) == len(fset)]).reduceByKey(lambda x, y: x + y).filter(lambda (k, v): v >= MIN_COUNT).collect()))
+                results_groups.append((group[0], group[1].rdd.map(lambda p: (p['signature'], set(p.asDict().iteritems()))).flatMap(lambda p: [(fset, 1) for fset in broadcastVar2.value if len(p[1] & fset) == level]).reduceByKey(lambda x, y: x + y).filter(lambda (k, v): v >= MIN_COUNT).collect()))
             results_groups = dict(results_groups)
 
         save_results(results_ref, results_groups)
@@ -310,9 +310,7 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
         return results_groups
 
 
-    def generate_candidates(previous_candidates):
-        level = len(previous_candidates[group_names[0]][0]) + 1
-
+    def generate_candidates(previous_candidates, level):
         candidates = {}
         parents = {}
 
@@ -335,7 +333,7 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
 
         print('Counting level-' + str(level) + ' candidates...')
         t = time.time()
-        results_groups = count_candidates(candidates)
+        results_groups = count_candidates(candidates, level)
         print('[DONE ' + str(time.time() - t) + ']\n')
 
         print('Filtering level-' + str(level) + ' candidates...')
@@ -407,7 +405,7 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
     l = 1
     while sum(len(candidates[l][group_name]) for group_name in group_names) > 0 and l < 2:
         l += 1
-        candidates[l] = generate_candidates(candidates[l - 1])
+        candidates[l] = generate_candidates(candidates[l - 1], l)
         print(str(l) + ' RULES: ' + str(sum(len(candidates[l][group_name]) for group_name in group_names)))
 
 
