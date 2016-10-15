@@ -291,19 +291,19 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
         return False
 
     def count_candidates(candidates, level):
-        broadcastVar1 = sc.broadcast(set.union(*candidates.values()))
+        broadcastAllCandidates = sc.broadcast(set.union(*candidates.values()))
         if signatures is not None:
-            broadcastVar2 = sc.broadcast(candidates)
-            results = dfReference.rdd.map(lambda p: (p['signature'], set(p.asDict().iteritems()))).flatMap(lambda p: [(fset, 1) for fset in broadcastVar1.value if len(p[1] & fset) == level] + ([] if p[0] not in broadcastSignatures.value else [((p[0], fset), 1) for fset in broadcastVar2.value[p[0]] if len(p[1] & fset) == level])).reduceByKey(lambda x, y: x + y).filter(lambda (k, v): v >= MIN_COUNT).collect()
+            broadcastCandidatesMap = sc.broadcast(candidates)
+            results = dfReference.rdd.map(lambda p: (p['signature'], set(p.asDict().iteritems()))).flatMap(lambda p: [(fset, 1) for fset in broadcastAllCandidates.value if len(p[1] & fset) == level] + ([] if p[0] not in broadcastSignatures.value else [((p[0], fset), 1) for fset in broadcastCandidatesMap.value[p[0]] if len(p[1] & fset) == level])).reduceByKey(lambda x, y: x + y).filter(lambda (k, v): v >= MIN_COUNT).collect()
 
             results_ref = [r for r in results if isinstance(r[0], frozenset)]
             results_groups = dict([(signature, [(r[0][1], r[1]) for r in results if not isinstance(r[0], frozenset) and r[0][0] == signature]) for signature in signatures])
         else:
-            results_ref = dfReference.rdd.map(lambda p: (p['signature'], set(p.asDict().iteritems()))).flatMap(lambda p: [(fset, 1) for fset in broadcastVar1.value if len(p[1] & fset) == level]).reduceByKey(lambda x, y: x + y).filter(lambda (k, v): v >= MIN_COUNT).collect()
+            results_ref = dfReference.rdd.map(lambda p: (p['signature'], set(p.asDict().iteritems()))).flatMap(lambda p: [(fset, 1) for fset in broadcastAllCandidates.value if len(p[1] & fset) == level]).reduceByKey(lambda x, y: x + y).filter(lambda (k, v): v >= MIN_COUNT).collect()
             results_groups = []
             for group in groups:
-                broadcastVar2 = sc.broadcast(candidates[group[0]])
-                results_groups.append((group[0], group[1].rdd.map(lambda p: (p['signature'], set(p.asDict().iteritems()))).flatMap(lambda p: [(fset, 1) for fset in broadcastVar2.value if len(p[1] & fset) == level]).reduceByKey(lambda x, y: x + y).filter(lambda (k, v): v >= MIN_COUNT).collect()))
+                broadcastCandidates = sc.broadcast(candidates[group[0]])
+                results_groups.append((group[0], group[1].rdd.map(lambda p: (p['signature'], set(p.asDict().iteritems()))).flatMap(lambda p: [(fset, 1) for fset in broadcastCandidates.value if len(p[1] & fset) == level]).reduceByKey(lambda x, y: x + y).filter(lambda (k, v): v >= MIN_COUNT).collect()))
             results_groups = dict(results_groups)
 
         save_results(results_ref, results_groups)
@@ -354,17 +354,17 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
     results_ref = get_first_level_results('reference', dfReference.columns)
     results_groups = dict([(group_name, get_first_level_results(group_name, dfReference.columns)) for group_name in group_names])
     columns = [c for c in dfReference.columns if c not in get_columns('reference', dfReference.columns) and c != 'signature']
-    broadcastVar = sc.broadcast(columns)
+    broadcastColumns = sc.broadcast(columns)
     if signatures is not None:
-        results = dfReference.rdd.flatMap(lambda p: [(frozenset([(key,p[key])]), 1) for key in broadcastVar.value] + ([] if p['signature'] not in broadcastSignatures.value else [((p['signature'], frozenset([(key,p[key])])), 1) for key in broadcastVar.value])).reduceByKey(lambda x, y: x + y).filter(lambda (k, v): v >= MIN_COUNT).collect()
+        results = dfReference.rdd.flatMap(lambda p: [(frozenset([(key,p[key])]), 1) for key in broadcastColumns.value] + ([] if p['signature'] not in broadcastSignatures.value else [((p['signature'], frozenset([(key,p[key])])), 1) for key in broadcastColumns.value])).reduceByKey(lambda x, y: x + y).filter(lambda (k, v): v >= MIN_COUNT).collect()
 
         results_ref += [r for r in results if isinstance(r[0], frozenset)]
         for group_name in group_names:
             results_groups[group_name] += [(r[0][1], r[1]) for r in results if not isinstance(r[0], frozenset) and r[0][0] == group_name]
     else:
-        results_ref += dfReference.rdd.flatMap(lambda p: [(frozenset([(key,p[key])]), 1) for key in broadcastVar.value]).reduceByKey(lambda x, y: x + y).filter(lambda (k, v): v >= MIN_COUNT).collect()
+        results_ref += dfReference.rdd.flatMap(lambda p: [(frozenset([(key,p[key])]), 1) for key in broadcastColumns.value]).reduceByKey(lambda x, y: x + y).filter(lambda (k, v): v >= MIN_COUNT).collect()
         for group in groups:
-            results_groups[group[0]] += group[1].rdd.flatMap(lambda p: [(frozenset([(key,p[key])]), 1) for key in broadcastVar.value]).reduceByKey(lambda x, y: x + y).filter(lambda (k, v): v >= MIN_COUNT).collect()
+            results_groups[group[0]] += group[1].rdd.flatMap(lambda p: [(frozenset([(key,p[key])]), 1) for key in broadcastColumns.value]).reduceByKey(lambda x, y: x + y).filter(lambda (k, v): v >= MIN_COUNT).collect()
 
     save_results(results_ref, results_groups)
     print('[DONE ' + str(time.time() - t) + ']\n')
