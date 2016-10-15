@@ -290,20 +290,20 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
 
         return False
 
-    def count_candidates(candidates, level):
+    def count_candidates(candidates):
         broadcastAllCandidates = sc.broadcast(set.union(*candidates.values()))
         if signatures is not None:
             broadcastCandidatesMap = sc.broadcast(candidates)
-            results = dfReference.rdd.map(lambda p: (p['signature'], set(p.asDict().iteritems()))).flatMap(lambda p: [(fset, 1) for fset in broadcastAllCandidates.value if len(p[1] & fset) == level] + ([] if p[0] not in broadcastSignatures.value else [((p[0], fset), 1) for fset in broadcastCandidatesMap.value[p[0]] if len(p[1] & fset) == level])).reduceByKey(lambda x, y: x + y).filter(lambda (k, v): v >= MIN_COUNT).collect()
+            results = dfReference.rdd.map(lambda p: (p['signature'], set(p.asDict().iteritems()))).flatMap(lambda p: [(fset, 1) for fset in broadcastAllCandidates.value if fset <= p[1]] + ([] if p[0] not in broadcastSignatures.value else [((p[0], fset), 1) for fset in broadcastCandidatesMap.value[p[0]] if fset <= p[1]])).reduceByKey(lambda x, y: x + y).filter(lambda (k, v): v >= MIN_COUNT).collect()
 
             results_ref = [r for r in results if isinstance(r[0], frozenset)]
             results_groups = dict([(signature, [(r[0][1], r[1]) for r in results if not isinstance(r[0], frozenset) and r[0][0] == signature]) for signature in signatures])
         else:
-            results_ref = dfReference.rdd.map(lambda p: (p['signature'], set(p.asDict().iteritems()))).flatMap(lambda p: [(fset, 1) for fset in broadcastAllCandidates.value if len(p[1] & fset) == level]).reduceByKey(lambda x, y: x + y).filter(lambda (k, v): v >= MIN_COUNT).collect()
+            results_ref = dfReference.rdd.map(lambda p: (p['signature'], set(p.asDict().iteritems()))).flatMap(lambda p: [(fset, 1) for fset in broadcastAllCandidates.value if fset <= p[1]]).reduceByKey(lambda x, y: x + y).filter(lambda (k, v): v >= MIN_COUNT).collect()
             results_groups = []
             for group in groups:
                 broadcastCandidates = sc.broadcast(candidates[group[0]])
-                results_groups.append((group[0], group[1].rdd.map(lambda p: (p['signature'], set(p.asDict().iteritems()))).flatMap(lambda p: [(fset, 1) for fset in broadcastCandidates.value if len(p[1] & fset) == level]).reduceByKey(lambda x, y: x + y).filter(lambda (k, v): v >= MIN_COUNT).collect()))
+                results_groups.append((group[0], group[1].rdd.map(lambda p: (p['signature'], set(p.asDict().iteritems()))).flatMap(lambda p: [(fset, 1) for fset in broadcastCandidates.value if fset <= p[1]]).reduceByKey(lambda x, y: x + y).filter(lambda (k, v): v >= MIN_COUNT).collect()))
             results_groups = dict(results_groups)
 
         save_results(results_ref, results_groups)
@@ -334,7 +334,7 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
 
         print('Counting level-' + str(level) + ' candidates...')
         t = time.time()
-        results_groups = count_candidates(candidates, level)
+        results_groups = count_candidates(candidates)
         print('[DONE ' + str(time.time() - t) + ']\n')
 
         print('Filtering level-' + str(level) + ' candidates...')
