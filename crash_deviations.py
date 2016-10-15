@@ -101,11 +101,11 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
         substrings = [substring.replace('.', '__DOT__') for substring in substrings]
 
         if signatures is not None:
-            found_substrings = reference.select(['signature'] + [(functions.instr(reference[field_name], substring.replace('__DOT__', '.')) != 0).alias(substring) for substring in substrings]).rdd.flatMap(lambda v: [(substring, 1) for substring in substrings if v[substring]] + ([] if v['signature'] not in signatures else [((v['signature'], substring), 1) for substring in substrings if v[substring]])).reduceByKey(lambda x, y: x + y).collect()
+            found_substrings = reference.select(['signature'] + [(functions.instr(reference[field_name], substring.replace('__DOT__', '.')) != 0).alias(str(substrings.index(substring))) for substring in substrings]).rdd.flatMap(lambda v: [(i, 1) for i in range(0, len(substrings)) if v[str(i)]] + ([] if v['signature'] not in signatures else [((v['signature'], i), 1) for i in range(0, len(substrings)) if v[str(i)]])).reduceByKey(lambda x, y: x + y).collect()
 
-            substrings_ref = [substring for substring in found_substrings if isinstance(substring[0], basestring)]
-            substrings_signatures = [substring for substring in found_substrings if not isinstance(substring[0], basestring)]
-            substrings_groups = dict([(signature, [(substring, count) for (s, substring), count in substrings_signatures if s == signature]) for signature in signatures])
+            substrings_ref = [(substrings[elem[0]], elem[1]) for elem in found_substrings if isinstance(elem[0], int)]
+            substrings_signatures = [elem for elem in found_substrings if not isinstance(elem[0], int)]
+            substrings_groups = dict([(signature, [(substrings[i], count) for (s, i), count in substrings_signatures if s == signature]) for signature in signatures])
         else:
             substrings_ref = reference.select([(functions.instr(reference[field_name], substring.replace('__DOT__', '.')) != 0).alias(substring) for substring in substrings]).rdd.flatMap(lambda v: [(substring, 1) for substring in substrings if v[substring]]).reduceByKey(lambda x, y: x + y).collect()
 
