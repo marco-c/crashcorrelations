@@ -42,9 +42,10 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
             print(group_name + ' is too small: ' + str(total_groups[group_name]) + ' crash reports.')
 
     total_reference = reference.count()
-    group_names = set([group_name for group_name, group_df in groups if group_name in total_groups and total_groups[group_name] >= MIN_COUNT])
+    group_names = [group_name for group_name, group_df in groups if group_name in total_groups and total_groups[group_name] >= MIN_COUNT]
     if signatures is not None:
         signatures = group_names
+        broadcastSignatures = sc.broadcast(set(signatures))
 
 
     saved_counts = {}
@@ -101,7 +102,7 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
         substrings = [substring.replace('.', '__DOT__') for substring in substrings]
 
         if signatures is not None:
-            found_substrings = reference.select(['signature'] + [(functions.instr(reference[field_name], substring.replace('__DOT__', '.')) != 0).alias(str(substrings.index(substring))) for substring in substrings]).rdd.flatMap(lambda v: [(i, 1) for i in range(0, len(substrings)) if v[str(i)]] + ([] if v['signature'] not in signatures else [((v['signature'], i), 1) for i in range(0, len(substrings)) if v[str(i)]])).reduceByKey(lambda x, y: x + y).collect()
+            found_substrings = reference.select(['signature'] + [(functions.instr(reference[field_name], substring.replace('__DOT__', '.')) != 0).alias(str(substrings.index(substring))) for substring in substrings]).rdd.flatMap(lambda v: [(i, 1) for i in range(0, len(substrings)) if v[str(i)]] + ([] if v['signature'] not in broadcastSignatures.value else [((v['signature'], i), 1) for i in range(0, len(substrings)) if v[str(i)]])).reduceByKey(lambda x, y: x + y).collect()
 
             substrings_ref = [(substrings[elem[0]], elem[1]) for elem in found_substrings if isinstance(elem[0], int)]
             substrings_signatures = [elem for elem in found_substrings if not isinstance(elem[0], int)]
@@ -137,7 +138,7 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
         print('Counting addons...')
         t = time.time()
         if signatures is not None:
-            found_addons = reference.select(['signature'] + [functions.explode(reference['addons']).alias('addon')]).rdd.zipWithIndex().filter(lambda (v, i): i % 2 == 0).flatMap(lambda (v, i): [(v, 1), (v['addon'], 1)] if v['signature'] in signatures else [(v['addon'], 1)]).reduceByKey(lambda x, y: x + y).collect()
+            found_addons = reference.select(['signature'] + [functions.explode(reference['addons']).alias('addon')]).rdd.zipWithIndex().filter(lambda (v, i): i % 2 == 0).flatMap(lambda (v, i): [(v, 1), (v['addon'], 1)] if v['signature'] in broadcastSignatures.value else [(v['addon'], 1)]).reduceByKey(lambda x, y: x + y).collect()
 
             addons_ref = [addon for addon in found_addons if not isinstance(addon[0], Row)]
             addons_signatures = [addon for addon in found_addons if isinstance(addon[0], Row)]
@@ -293,7 +294,7 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
         broadcastVar1 = sc.broadcast(set.union(*candidates.values()))
         if signatures is not None:
             broadcastVar2 = sc.broadcast(candidates)
-            results = dfReference.rdd.map(lambda p: (p['signature'], set(p.asDict().iteritems()))).flatMap(lambda p: [(fset, 1) for fset in broadcastVar1.value if len(p[1] & fset) == level] + ([] if p[0] not in signatures else [((p[0], fset), 1) for fset in broadcastVar2.value[p[0]] if len(p[1] & fset) == level])).reduceByKey(lambda x, y: x + y).filter(lambda (k, v): v >= MIN_COUNT).collect()
+            results = dfReference.rdd.map(lambda p: (p['signature'], set(p.asDict().iteritems()))).flatMap(lambda p: [(fset, 1) for fset in broadcastVar1.value if len(p[1] & fset) == level] + ([] if p[0] not in broadcastSignatures.value else [((p[0], fset), 1) for fset in broadcastVar2.value[p[0]] if len(p[1] & fset) == level])).reduceByKey(lambda x, y: x + y).filter(lambda (k, v): v >= MIN_COUNT).collect()
 
             results_ref = [r for r in results if isinstance(r[0], frozenset)]
             results_groups = dict([(signature, [(r[0][1], r[1]) for r in results if not isinstance(r[0], frozenset) and r[0][0] == signature]) for signature in signatures])
@@ -355,7 +356,7 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
     columns = [c for c in dfReference.columns if c not in get_columns('reference', dfReference.columns) and c != 'signature']
     broadcastVar = sc.broadcast(columns)
     if signatures is not None:
-        results = dfReference.rdd.flatMap(lambda p: [(frozenset([(key,p[key])]), 1) for key in broadcastVar.value] + ([] if p['signature'] not in signatures else [((p['signature'], frozenset([(key,p[key])])), 1) for key in broadcastVar.value])).reduceByKey(lambda x, y: x + y).filter(lambda (k, v): v >= MIN_COUNT).collect()
+        results = dfReference.rdd.flatMap(lambda p: [(frozenset([(key,p[key])]), 1) for key in broadcastVar.value] + ([] if p['signature'] not in broadcastSignatures.value else [((p['signature'], frozenset([(key,p[key])])), 1) for key in broadcastVar.value])).reduceByKey(lambda x, y: x + y).filter(lambda (k, v): v >= MIN_COUNT).collect()
 
         results_ref += [r for r in results if isinstance(r[0], frozenset)]
         for group_name in group_names:
