@@ -27,7 +27,7 @@ def get_crashes(sc, versions, days, product='Firefox'):
     return SQLContext(sc).read.format('json').load(download_data.get_paths(versions, days, product))
 
 
-def find_deviations(sc, reference, groups=None, signatures=None, min_support_diff=0.15, min_corr=0.03, all_addons=None, all_gfx_critical_errors=None, all_app_notes=None, analyze_addon_versions=False):
+def find_deviations(sc, reference, groups=None, signatures=None, min_support_diff=0.15, min_corr=0.03, all_addons=None, all_gfx_critical_errors=None, all_app_notes=None):
     if groups is None and signatures is None:
         raise Exception('Either groups or signatures should not be None')
 
@@ -158,7 +158,7 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
         if 'addons' in df.columns:
             def get_version(addons, addon):
                 if addons is None:
-                    return 'N/A'
+                    return None
 
                 for i in range(0, len(addons), 2):
                     if addons[i] == addon:
@@ -169,10 +169,7 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
             def create_get_version_udf(addon):
                 return functions.udf(lambda addons: get_version(addons, addon), StringType())
 
-            if analyze_addon_versions:
-                df = df.select(['*'] + [create_get_version_udf(addon)(df['addons']).alias(addon.replace('.', '__DOT__')) for addon in all_addons])
-            else:
-                df = df.select(['*'] + [functions.array_contains(df['addons'], addon).alias(addon.replace('.', '__DOT__')) for addon in all_addons])
+            df = df.select(['*'] + [functions.array_contains(df['addons'], addon).alias(addon.replace('.', '__DOT__')) for addon in all_addons] + [create_get_version_udf(addon)(df['addons']).alias(addon.replace('.', '__DOT__') + '-version') for addon in all_addons])
 
         if 'plugin_version' in df.columns:
             df = df.withColumn('plugin', df['plugin_version'].isNotNull())
@@ -378,7 +375,7 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
 
 
     # Remove useless rules (e.g. addon_X=True and addon_X=False or is_garbage_collecting=1 and is_garbage_collecting=None).
-    def ignore_rule(candidate, candidates):
+    def ignore_rule(candidate, candidates, group_name):
         elem_key, elem_val = list(candidate)[0]
 
         if elem_val == False and frozenset([(elem_key, True)]) in candidates:
@@ -394,10 +391,19 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
         if elem_key == 'submitted_from_infobar' and elem_val is None:
             return True
 
+        # Ignore addon version...
+        if elem_key.endswith('-version') and elem_key.replace('__DOT__', '.')[:-8] in all_addons:
+            # ... when unavailable or...
+            if elem_val == None or elem_val == 'Not installed':
+                return True
+            # ... when it's not adding new information compared to addon presence.
+            if frozenset([(elem_key[:-8], True)]) in candidates and get_count(candidate, group_name) == get_count(frozenset([(elem_key[:-8], True)]), group_name):
+                return True
+
         return False
 
     for group_name in group_names:
-        candidates[1][group_name] = [c for c in candidates[1][group_name] if not ignore_rule(c, candidates[1][group_name])]
+        candidates[1][group_name] = [c for c in candidates[1][group_name] if not ignore_rule(c, candidates[1][group_name], group_name)]
 
     print('[DONE ' + str(time.time() - t) + ']\n')
     print('1 RULES: ' + str(sum(len(candidates[1][group_name]) for group_name in group_names)))
@@ -467,6 +473,9 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
                 addon_or_error = key.replace('__DOT__', '.')
                 if addon_or_error in all_addons:
                     dict_candidate['Addon "' + (addons.get_addon_name(addon_or_error) or addon_or_error) + '"'] = val
+                    del dict_candidate[key]
+                elif addon_or_error.endswith('-version') and addon_or_error[:-8] in all_addons:
+                    dict_candidate['Addon "' + (addons.get_addon_name(addon_or_error[:-8]) or addon_or_error[:-8]) + '" Version'] = val
                     del dict_candidate[key]
                 elif key in all_gfx_critical_errors:
                     dict_candidate['GFX_ERROR "' + addon_or_error + '"'] = val
