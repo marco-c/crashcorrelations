@@ -397,7 +397,7 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
             if elem_val == None or elem_val == 'Not installed':
                 return True
             # ... when it's not adding new information compared to addon presence.
-            if frozenset([(elem_key[:-8], True)]) in candidates and get_count(candidate, group_name) == get_count(frozenset([(elem_key[:-8], True)]), group_name):
+            if frozenset([(elem_key[:-8], True)]) in candidates and abs(get_count(candidate, group_name) / total_groups[group_name] - get_count(frozenset([(elem_key[:-8], True)]), group_name) / total_groups[group_name]) <= 0.01:
                 return True
 
         return False
