@@ -499,7 +499,7 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
     return results, total_reference, total_groups
 
 
-def print_results(results, total_reference, total_groups):
+def print_results(results, total_reference, total_groups, reference_name='overall'):
     def to_percentage(num):
         result = "%.2f" % (num * 100)
 
@@ -514,9 +514,9 @@ def print_results(results, total_reference, total_groups):
     def item_to_label(rule):
         return u' ∧ '.join([key + '="' + str(value) + '"' for key, value in rule.items()]).encode('utf-8')
 
-    def print_all(results):
+    def print_all(results, group_name):
         for result in results:
-            print('(' + to_percentage(result['count_group'] / total_groups[group]) + '% in signature vs ' + to_percentage(result['count_reference'] / total_reference) + '% overall) ' + item_to_label(result['item']))
+            print('(' + to_percentage(result['count_group'] / total_groups[group]) + '% in ' + group_name + ' vs ' + to_percentage(result['count_reference'] / total_reference) + '% ' + reference_name + ') ' + item_to_label(result['item']))
 
     for group in results.keys():
         print(group)
@@ -524,10 +524,10 @@ def print_results(results, total_reference, total_groups):
         len1 = [result for result in results[group] if len(result['item']) == 1]
         others = [result for result in results[group] if len(result['item']) > 1]
 
-        print_all(sorted(len1, key=lambda v: (-abs(v['count_reference'] / total_reference - v['count_group'] / total_groups[group]))))
+        print_all(sorted(len1, key=lambda v: (-abs(v['count_reference'] / total_reference - v['count_group'] / total_groups[group]))), group)
 
         print('\n\n')
 
-        print_all(sorted(others, key=lambda v: (-round(abs(v['count_reference'] / total_reference - v['count_group'] / total_groups[group]), 2), len(v['item']))))
+        print_all(sorted(others, key=lambda v: (-round(abs(v['count_reference'] / total_reference - v['count_group'] / total_groups[group]), 2), len(v['item']))), group)
 
         print('\n\n\n')
