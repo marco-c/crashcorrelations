@@ -156,7 +156,8 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
 
     def augment(df):
         if 'addons' in df.columns:
-            def get_version(addons, addon):
+            # TODO: Reenable once scheduled jobs on atmo v2 are working.
+            '''def get_version(addons, addon):
                 if addons is None:
                     return None
 
@@ -169,7 +170,9 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
             def create_get_version_udf(addon):
                 return functions.udf(lambda addons: get_version(addons, addon), StringType())
 
-            df = df.select(['*'] + [functions.array_contains(df['addons'], addon).alias(addon.replace('.', '__DOT__')) for addon in all_addons] + [create_get_version_udf(addon)(df['addons']).alias(addon.replace('.', '__DOT__') + '-version') for addon in all_addons])
+            df = df.select(['*'] + [functions.array_contains(df['addons'], addon).alias(addon.replace('.', '__DOT__')) for addon in all_addons] + [create_get_version_udf(addon)(df['addons']).alias(addon.replace('.', '__DOT__') + '-version') for addon in all_addons])'''
+
+            df = df.select(['*'] + [functions.array_contains(df['addons'], addon).alias(addon.replace('.', '__DOT__')) for addon in all_addons])
 
         if 'plugin_version' in df.columns:
             df = df.withColumn('plugin', df['plugin_version'].isNotNull())
