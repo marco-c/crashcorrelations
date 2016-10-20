@@ -62,13 +62,13 @@ def clean_old_data():
 
 def download(path):
     try:
-        boto3.resource('s3').Bucket('net-mozaws-prod-us-west-2-pipeline-analysis').download_file('marco/' + path, path)
+        boto3.resource('s3').Bucket('net-mozaws-prod-us-west-2-pipeline-analysis').download_file('marco/' + path, '/mnt/' + path)
     except:
         pass
 
 
 def upload(path):
-    boto3.resource('s3').Bucket('net-mozaws-prod-us-west-2-pipeline-analysis').upload_file(path, 'marco/' + path)
+    boto3.resource('s3').Bucket('net-mozaws-prod-us-west-2-pipeline-analysis').upload_file('/mnt/' + path, 'marco/' + path)
 
 
 def exists(path):
@@ -105,6 +105,7 @@ def get_path(version, day, product):
 def read_json(path):
     if is_amazon():
         download(path)
+        path = '/mnt/' + path
 
     data = []
 
@@ -116,7 +117,9 @@ def read_json(path):
 
 
 def write_json(path, data):
-    with open(path, 'w') as f:
+    actual_path = '/mnt/' + path if is_amazon() else path
+
+    with open(actual_path, 'w') as f:
         for elem in data:
             f.write(json.dumps(elem) + '\n')
 
@@ -245,8 +248,12 @@ def download_crashes(versions, days, product='Firefox'):
     if config.get('Socorro', 'token', __token) and not SCHEMA_VERSION.endswith('-with-token'):
         SCHEMA_VERSION += '-with-token'
 
-    if not os.path.exists('crashcorrelations_data'):
-        os.mkdir('crashcorrelations_data')
+    if is_amazon():
+        if not os.path.exists('/mnt/crashcorrelations_data'):
+            os.mkdir('/mnt/crashcorrelations_data')
+    else:
+        if not os.path.exists('crashcorrelations_data'):
+            os.mkdir('crashcorrelations_data')
 
     clean_old_data()
     write_json('crashcorrelations_data/schema_version', [SCHEMA_VERSION])
