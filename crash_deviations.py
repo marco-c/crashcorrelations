@@ -219,6 +219,9 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
 
             df = df.withColumn('adapter_driver_version_clean', get_driver_version_udf(df['adapter_vendor_id'], df['adapter_driver_version']))
 
+        if 'cpu_info' in df.columns:
+            df = df.withColumn('CPU Info', functions.substring_index(df['cpu_info'], ' | ', 1))
+
         return df
 
 
@@ -229,6 +232,7 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
             'graphics_critical_error',
             'addons',
             'date',
+            'cpu_info',
         ]])
 
     dfReference = drop_unneeded(augment(reference)).cache()
@@ -237,7 +241,6 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
 
     # dfReference.show(3)
     # dfReference.printSchema()
-
 
     def union(frozenset1, frozenset2):
         res = frozenset1.union(frozenset2)
