@@ -17,6 +17,7 @@ import versions
 
 
 SCHEMA_VERSION = '5'
+AMAZON_DIR = 'marco'
 
 
 __token = ''
@@ -50,7 +51,7 @@ def clean_old_data():
     if is_amazon():
         bucket = boto3.resource('s3').Bucket('net-mozaws-prod-us-west-2-pipeline-analysis')
 
-        for key in bucket.objects.filter(Prefix='marco/crashcorrelations_data'):
+        for key in bucket.objects.filter(Prefix=AMAZON_DIR + '/crashcorrelations_data'):
             if 'schema_version' not in key.key and (old_schema != SCHEMA_VERSION or dateutil.parser.parse(key.key[-15:-5]).date() < utils.utc_today() - timedelta(MAX_AGE)):
                 key.delete()
     else:
@@ -62,22 +63,22 @@ def clean_old_data():
 
 def download(path):
     try:
-        boto3.resource('s3').Bucket('net-mozaws-prod-us-west-2-pipeline-analysis').download_file('marco/' + path, path)
+        boto3.resource('s3').Bucket('net-mozaws-prod-us-west-2-pipeline-analysis').download_file(AMAZON_DIR + '/' + path, path)
     except:
         pass
 
 
 def upload(path):
-    boto3.resource('s3').Bucket('net-mozaws-prod-us-west-2-pipeline-analysis').upload_file(path, 'marco/' + path)
+    boto3.resource('s3').Bucket('net-mozaws-prod-us-west-2-pipeline-analysis').upload_file(path, AMAZON_DIR + '/' + path)
 
 
 def exists(path):
     if is_amazon():
         try:
-            prefix = 's3://net-mozaws-prod-us-west-2-pipeline-analysis/marco/'
+            prefix = 's3://net-mozaws-prod-us-west-2-pipeline-analysis/' + AMAZON_DIR + '/'
             if prefix in path:
                 path = path[len(prefix):]
-            boto3.resource('s3').Object('net-mozaws-prod-us-west-2-pipeline-analysis', 'marco/' + path).load()
+            boto3.resource('s3').Object('net-mozaws-prod-us-west-2-pipeline-analysis', AMAZON_DIR + '/' + path).load()
         except botocore.exceptions.ClientError as e:
             if e.response['Error']['Code'] == '404':
                 return False
@@ -97,7 +98,7 @@ def get_path(version, day, product):
     path = file_path(version, day, product)
 
     if is_amazon():
-        return 's3://net-mozaws-prod-us-west-2-pipeline-analysis/marco/' + path
+        return 's3://net-mozaws-prod-us-west-2-pipeline-analysis/' + AMAZON_DIR + '/' + path
     else:
         return path
 
