@@ -176,7 +176,6 @@ def download_day_crashes(version, day, product='Firefox'):
                 'is_garbage_collecting',
                 'jit_category',
                 'moz_crash_reason',
-                'number_of_processors',
                 'oom_allocation_size',
                 'platform',
                 'platform_pretty_version',
