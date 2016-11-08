@@ -141,7 +141,7 @@ def download_day_crashes(version, day, product='Firefox'):
     while not finished:
         params = {
             'product': product,
-            'date': ['>=' + str(day), '<' + str(day + timedelta(1))] if day != utils.utc_today() else '>=' + str(day),
+            'date': ['>=' + str(day), '<' + str(day + timedelta(1))],
             'version': version,
             '_columns': [
                 'abort_message',
