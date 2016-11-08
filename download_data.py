@@ -16,7 +16,7 @@ import config
 import versions
 
 
-SCHEMA_VERSION = '4'
+SCHEMA_VERSION = '5'
 
 
 __token = ''
@@ -192,6 +192,7 @@ def download_day_crashes(version, day, product='Firefox'):
                 'total_virtual_memory',
                 'url',
                 'useragent_locale',
+                'uuid',
             ],
             '_results_number': RESULTS_NUMBER,
             '_results_offset': len(crashes),
@@ -236,7 +237,14 @@ def download_day_crashes(version, day, product='Firefox'):
         if len(found) < RESULTS_NUMBER:
             finished = True
 
-    write_json(path, crashes)
+    uuids = set()
+    filtered_crashes = []
+    for crash in crashes:
+        if crash['uuid'] not in uuids:
+            uuids.add(crash['uuid'])
+            filtered_crashes.append(crash)
+
+    write_json(path, filtered_crashes)
 
 
 def download_crashes(versions, days, product='Firefox'):
