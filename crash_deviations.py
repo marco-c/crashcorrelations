@@ -233,6 +233,7 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
             'addons',
             'date',
             'cpu_info',
+            'user_comments',
             'uuid',
         ]])
 
