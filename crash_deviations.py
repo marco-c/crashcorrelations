@@ -221,6 +221,7 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
 
         if 'cpu_info' in df.columns:
             df = df.withColumn('CPU Info', functions.substring_index(df['cpu_info'], ' | ', 1))
+            df = df.withColumn('Is Multicore', functions.substring_index(df['cpu_info'], ' | ', -1) != '1')
 
         return df
 
