@@ -154,6 +154,38 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
         print('[DONE ' + str(time.time() - t) + ']\n')
 
 
+    priors_graph = {
+        'platform': ['platform_pretty_version'],
+        'platform_pretty_version': ['platform_version'],
+        'adapter_vendor_id': ['adapter_device_id'],
+        'adapter_device_id': ['adapter_driver_version', 'adapter_driver_version_clean'],
+        'adapter_driver_version': list(all_app_notes) + list(all_gfx_critical_errors),
+        'CPU Info': ['cpu_microcode_version'],
+    }
+
+    for addon in all_addons:
+        priors_graph[addon] = [addon + '-version']
+
+    def find_path(start, end, path=[]):
+        path = path + [start]
+
+        if start == end:
+            return path
+
+        if start not in priors_graph:
+            return None
+
+        for node in priors_graph[start]:
+            if node in path:
+                continue
+
+            newpath = find_path(node, end, path)
+            if newpath:
+                return newpath
+
+        return None
+
+
     def augment(df):
         if 'addons' in df.columns:
             '''def get_version(addons, addon):
@@ -276,20 +308,27 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
         parent2_support_reference = parent2_count_reference / total_reference
         parent2_count_group = get_count(parent2, group_name)
         parent2_support_group = parent2_count_group / total_groups[group_name]
+        given_parent1_support_reference = count_reference / parent1_count_reference
+        given_parent1_support_group = count_group / parent1_count_group
+        given_parent2_support_reference = count_reference / parent2_count_reference
+        given_parent2_support_group = count_group / parent2_count_group
 
         # TODO: Add fixed relations pruning.
 
         # If there's no large change in the support of a set when extending the set, prune the node.
+        # TODO: Consider using a ratio instead of a threshold.
         threshold = min(0.05, min_support_diff / 2)
-        if (abs(parent1_support_reference - support_reference) < threshold or abs(parent2_support_reference - support_reference) < threshold) and (abs(parent1_support_group - support_group) < threshold or abs(parent2_support_group - support_group) < threshold):
+
+        if (abs(parent1_support_reference - given_parent1_support_reference) > threshold or abs(parent1_support_group - given_parent1_support_group) > threshold) and (abs(parent2_support_reference - given_parent2_support_reference) > threshold or abs(parent2_support_group - given_parent2_support_group) > threshold):
+            return False
+
+        if (abs(parent1_support_reference - support_reference) < threshold and abs(parent1_support_group - support_group) < threshold) or (abs(parent2_support_reference - support_reference) < threshold and abs(parent2_support_group - support_group) < threshold):
             return True
 
         # If there's no significative change, prune the node.
-        chi2, p1_reference = scipy.stats.chisquare([parent1_count_reference, count_reference])
-        chi2, p2_reference = scipy.stats.chisquare([parent2_count_reference, count_reference])
-        chi2, p1_group = scipy.stats.chisquare([parent1_count_group, count_group])
-        chi2, p2_group = scipy.stats.chisquare([parent2_count_group, count_group])
-        if (p1_reference > 0.05 or p2_reference > 0.05) and (p1_group > 0.05 or p2_group > 0.05):
+        chi2, p1, dof, expected = scipy.stats.chi2_contingency([[parent1_count_group, count_group], [parent1_count_reference, count_reference]])
+        chi2, p2, dof, expected = scipy.stats.chi2_contingency([[parent2_count_group, count_group], [parent2_count_reference, count_reference]])
+        if p1 > 0.5 and p2 > 0.5:
             return True
 
         return False
@@ -426,13 +465,36 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
     all_candidates = dict([(group_name, sum([candidates[i][group_name] for i in range(1,l+1)], [])) for group_name in group_names])
 
 
+    def clean_candidate(candidate):
+        transformed_candidate = dict(candidate)
+        dict_candidate = transformed_candidate.copy()
+        for key, val in candidate:
+            addon_or_error = key.replace('__DOT__', '.')
+            if addon_or_error in all_addons:
+                dict_candidate['Addon "' + (addons.get_addon_name(addon_or_error) or addon_or_error) + '"'] = val
+                del dict_candidate[key]
+            elif addon_or_error.endswith('-version') and addon_or_error[:-8] in all_addons:
+                dict_candidate['Addon "' + (addons.get_addon_name(addon_or_error[:-8]) or addon_or_error[:-8]) + '" Version'] = val
+                del dict_candidate[key]
+            elif key in all_gfx_critical_errors:
+                dict_candidate['GFX_ERROR "' + addon_or_error + '"'] = val
+                del dict_candidate[key]
+            elif key in all_app_notes:
+                dict_candidate['"' + addon_or_error + '" in app_notes'] = val
+                del dict_candidate[key]
+            elif key == 'adapter_vendor_id':
+                dict_candidate[key] = pciids.get_vendor_name(val)
+            elif key == 'adapter_device_id' and 'adapter_vendor_id' in transformed_candidate:
+                dict_candidate[key] = pciids.get_device_name(transformed_candidate['adapter_vendor_id'], val)
+        return dict_candidate
+
     print('Final rules filtering...')
     t = time.time()
     alpha = 0.05
     alpha_k = alpha
     results = {}
     for group_name in group_names:
-        results[group_name] = []
+        results[group_name] = {}
 
         total_group = total_groups[group_name]
 
@@ -441,6 +503,44 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
             count_group = get_count(candidate, group_name)
             support_reference = count_reference / total_reference
             support_group = count_group / total_group
+
+            if len(candidate) > 1:
+                elems = [frozenset([item]) for item in candidate]
+
+                found_priors = []
+                for prior in elems:
+                    can_be_prior = True
+                    for elem in elems:
+                        if prior == elem:
+                            continue
+
+                        can_be_prior &= find_path(list(prior)[0][0], list(elem)[0][0]) is not None
+
+                    if can_be_prior:
+                        found_priors.append(prior)
+
+                got_prior = False
+                for found_prior in found_priors:
+                    others = frozenset.union(*[elem for elem in elems if elem != found_prior])
+                    if others in results[group_name]:
+                        # Check if with this prior the support difference is different than without the prior.
+                        others_support_group = get_count(others, group_name) / total_group
+                        others_support_reference = get_count(others, 'reference') / total_reference
+                        support_group_given_prior = get_count(candidate, group_name) / get_count(found_prior, group_name)
+                        support_reference_given_prior = get_count(candidate, 'reference') / get_count(found_prior, 'reference')
+
+                        threshold = min(0.05, min_support_diff / 2)
+                        if abs(others_support_group - support_group_given_prior) > threshold or abs(others_support_reference - support_reference_given_prior) > threshold:
+                            if results[group_name][others]['prior'] is None or results[group_name][others]['prior']['support_reference'] < support_reference_given_prior:
+                                results[group_name][others]['prior'] = {
+                                    'item': clean_candidate(found_prior),
+                                    'support_reference': support_reference_given_prior,
+                                    'support_group': support_group_given_prior,
+                                }
+                            got_prior = True
+
+                if got_prior:
+                    continue
 
             # Discard element if the support in the subset is not different enough from the support in the entire dataset.
             support_diff = abs(support_reference - support_group)
@@ -474,32 +574,14 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
             if phi < min_corr:
                 continue
 
-            transformed_candidate = dict(candidate)
-            dict_candidate = transformed_candidate.copy()
-            for key, val in candidate:
-                addon_or_error = key.replace('__DOT__', '.')
-                if addon_or_error in all_addons:
-                    dict_candidate['Addon "' + (addons.get_addon_name(addon_or_error) or addon_or_error) + '"'] = val
-                    del dict_candidate[key]
-                elif addon_or_error.endswith('-version') and addon_or_error[:-8] in all_addons:
-                    dict_candidate['Addon "' + (addons.get_addon_name(addon_or_error[:-8]) or addon_or_error[:-8]) + '" Version'] = val
-                    del dict_candidate[key]
-                elif key in all_gfx_critical_errors:
-                    dict_candidate['GFX_ERROR "' + addon_or_error + '"'] = val
-                    del dict_candidate[key]
-                elif key in all_app_notes:
-                    dict_candidate['"' + addon_or_error + '" in app_notes'] = val
-                    del dict_candidate[key]
-                elif key == 'adapter_vendor_id':
-                    dict_candidate[key] = pciids.get_vendor_name(val)
-                elif key == 'adapter_device_id' and 'adapter_vendor_id' in transformed_candidate:
-                    dict_candidate[key] = pciids.get_device_name(transformed_candidate['adapter_vendor_id'], val)
-
-            results[group_name].append({
-                'item': dict_candidate,
+            results[group_name][candidate] = {
+                'item': clean_candidate(candidate),
                 'count_reference': count_reference,
                 'count_group': count_group,
-            })
+                'prior': None,
+            }
+
+    results = dict([(group_name, list(results[group_name].values())) for group_name in group_names])
 
     print('[DONE ' + str(time.time() - t) + ']\n')
 
@@ -523,7 +605,7 @@ def print_results(results, total_reference, total_groups, reference_name='overal
 
     def print_all(results, group_name):
         for result in results:
-            print('(' + to_percentage(result['count_group'] / total_groups[group]) + '% in ' + group_name + ' vs ' + to_percentage(result['count_reference'] / total_reference) + '% ' + reference_name + ') ' + item_to_label(result['item']))
+            print('(' + to_percentage(result['count_group'] / total_groups[group]) + '% in ' + group_name + ' vs ' + to_percentage(result['count_reference'] / total_reference) + '% ' + reference_name + ') ' + item_to_label(result['item']) + ('' if result['prior'] is None else ' (' + to_percentage(result['prior']['support_group']) + '% vs ' + to_percentage(result['prior']['support_reference']) + '% given ' + item_to_label(result['prior']['item']) + ')'))
 
     for group in results.keys():
         print(group)
