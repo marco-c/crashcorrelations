@@ -23,11 +23,19 @@ import pciids
 MIN_COUNT = 5 # 5 for chi-squared test.
 
 
+# TODO: Once https://bugzilla.mozilla.org/show_bug.cgi?id=1311647 is fixed, stop using SuperSearch and use the Telemetry data for everything.
 def get_crashes(sc, versions, days, product='Firefox'):
     return SQLContext(sc).read.format('json').load(download_data.get_paths(versions, days, product))
 
 
-def find_deviations(sc, reference, groups=None, signatures=None, min_support_diff=0.15, min_corr=0.03, all_addons=None, all_gfx_critical_errors=None, all_app_notes=None):
+# TODO: Once https://bugzilla.mozilla.org/show_bug.cgi?id=1311647 is fixed, stop using SuperSearch and use the Telemetry data for everything.
+def get_telemetry_crashes(sc, versions, days, product='Firefox'):
+    days = download_data.get_days(days)
+    dataset = SQLContext(sc).read.load(['s3://telemetry-parquet/socorro_crash/v1/crash_date=' + day.strftime('%Y%m%d') for day in days], 'parquet')
+    return dataset.filter((dataset['product'] == product) & (dataset['version'].isin(versions)))
+
+
+def find_deviations(sc, reference, groups=None, signatures=None, min_support_diff=0.15, min_corr=0.03, all_addons=None, all_gfx_critical_errors=None, all_app_notes=None, telemetry_dataset=None):
     if groups is None and signatures is None:
         raise Exception('Either groups or signatures should not be None')
 
@@ -110,7 +118,7 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
         else:
             substrings_ref = reference.select([(functions.instr(reference[field_name], substring.replace('__DOT__', '.')) != 0).alias(substring) for substring in substrings]).rdd.flatMap(lambda v: [(substring, 1) for substring in substrings if v[substring]]).reduceByKey(lambda x, y: x + y).collect()
 
-            substrings_groups = dict([(group[0], group[1].select([(functions.instr(reference[field_name], substring.replace('__DOT__', '.')) != 0).alias(substring) for substring in substrings]).rdd.flatMap(lambda v: [(substring, 1) for substring in substrings if v[substring]]).reduceByKey(lambda x, y: x + y).collect()) for group in groups])
+            substrings_groups = dict([(group[0], group[1].select([(functions.instr(group[1][field_name], substring.replace('__DOT__', '.')) != 0).alias(substring) for substring in substrings]).rdd.flatMap(lambda v: [(substring, 1) for substring in substrings if v[substring]]).reduceByKey(lambda x, y: x + y).collect()) for group in groups])
 
         save_results(substrings_ref, substrings_groups)
 
@@ -152,6 +160,36 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
 
         all_addons = set([addon for addon, count in addons_ref if float(count) / total_reference > min_support_diff] + [addon for group_name in group_names for addon, count in addons_groups[group_name] if float(count) / total_groups[group_name] > min_support_diff])
         print('[DONE ' + str(time.time() - t) + ']\n')
+
+    # TODO: Once https://bugzilla.mozilla.org/show_bug.cgi?id=1311647 is fixed, stop using SuperSearch and use the Telemetry data for everything.
+    # Count modules.
+    all_modules = set()
+    if telemetry_dataset is not None:
+        all_uuids = set(reference.rdd.map(lambda p: p['uuid']).collect())
+        telemetry_dataset = telemetry_dataset.filter(telemetry_dataset['uuid'].isin(all_uuids))
+
+        print('Counting modules...')
+        t = time.time()
+
+        if signatures is not None:
+            found_modules = telemetry_dataset.select(['signature', 'uuid'] + [functions.explode(telemetry_dataset['json_dump']['modules']['filename']).alias('module')]).dropDuplicates(['uuid', 'module']).select(['signature', 'module']).rdd.flatMap(lambda v: [(v, 1), (v['module'], 1)] if v['signature'] in signatures else [(v['module'], 1)]).reduceByKey(lambda x, y: x + y).collect()
+
+
+            modules_ref = [module for module in found_modules if not isinstance(module[0], Row)]
+            modules_signatures = [module for module in found_modules if isinstance(module[0], Row)]
+            modules_groups = dict([(signature, [(module, count) for (s, module), count in modules_signatures if s == signature]) for signature in signatures])
+        else:
+            modules_ref = telemetry_dataset.select(functions.explode(telemetry_dataset['json_dump']['modules']['filename']).alias('module')).rdd.map(lambda v: (v['module'], 1)).reduceByKey(lambda x, y: x + y).collect()
+
+            modules_groups = dict([(group[0], group[1].select(functions.explode(group[1]['json_dump']['modules']['filename']).alias('module')).rdd.map(lambda v: (v['module'], 1)).reduceByKey(lambda x, y: x + y).collect()) for group in groups])
+
+        save_results(modules_ref, modules_groups)
+
+        all_modules = set([module for group_name in group_names for module, count in modules_groups[group_name] if float(count) / total_groups[group_name] > min_support_diff * 2])
+        print('[DONE ' + str(time.time() - t) + ']\n')
+
+    # TODO: Remove once we only use data from Telemetry.
+    all_modules_as_columns = [module.replace('.', '__DOT__') for module in all_modules]
 
 
     priors_graph = {
@@ -366,7 +404,15 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
             parents[group_name] = {}
 
             for i in range(0, len(previous_candidates[group_name])):
+                # TODO: Remove once we only use data from Telemetry.
+                if list(previous_candidates[group_name][i])[0][0] in all_modules_as_columns:
+                    continue
+
                 for j in range(i + 1, len(previous_candidates[group_name])):
+                    # TODO: Remove once we only use data from Telemetry.
+                    if list(previous_candidates[group_name][j])[0][0] in all_modules_as_columns:
+                        continue
+
                     props = union(previous_candidates[group_name][i], previous_candidates[group_name][j])
                     if len(props) == level and props not in candidates[group_name]:
                         candidates[group_name].add(props)
@@ -394,8 +440,8 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
     # Generate first level candidates.
     print('Counting first level candidates...')
     t = time.time()
-    results_ref = get_first_level_results('reference', dfReference.columns)
-    results_groups = dict([(group_name, get_first_level_results(group_name, dfReference.columns)) for group_name in group_names])
+    results_ref = get_first_level_results('reference', dfReference.columns + all_modules_as_columns)
+    results_groups = dict([(group_name, get_first_level_results(group_name, dfReference.columns + all_modules_as_columns)) for group_name in group_names])
     columns = [c for c in dfReference.columns if c not in get_columns('reference', dfReference.columns) and c != 'signature']
     broadcastColumns = sc.broadcast(columns)
     if signatures is not None:
@@ -421,6 +467,7 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
 
 
     # Remove useless rules (e.g. addon_X=True and addon_X=False or is_garbage_collecting=1 and is_garbage_collecting=None).
+    # TODO: Remove "app_note+" when we have "app_note-"?
     def ignore_rule(candidate, candidates, group_name):
         elem_key, elem_val = list(candidate)[0]
 
@@ -469,18 +516,21 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
         transformed_candidate = dict(candidate)
         dict_candidate = transformed_candidate.copy()
         for key, val in candidate:
-            addon_or_error = key.replace('__DOT__', '.')
-            if addon_or_error in all_addons:
-                dict_candidate['Addon "' + (addons.get_addon_name(addon_or_error) or addon_or_error) + '"'] = val
+            clean_key = key.replace('__DOT__', '.')
+            if clean_key in all_addons:
+                dict_candidate['Addon "' + (addons.get_addon_name(clean_key) or clean_key) + '"'] = val
                 del dict_candidate[key]
-            elif addon_or_error.endswith('-version') and addon_or_error[:-8] in all_addons:
-                dict_candidate['Addon "' + (addons.get_addon_name(addon_or_error[:-8]) or addon_or_error[:-8]) + '" Version'] = val
+            elif clean_key.endswith('-version') and clean_key[:-8] in all_addons:
+                dict_candidate['Addon "' + (addons.get_addon_name(clean_key[:-8]) or clean_key[:-8]) + '" Version'] = val
+                del dict_candidate[key]
+            elif clean_key in all_modules:
+                dict_candidate['Module "' + clean_key + '"'] = val
                 del dict_candidate[key]
             elif key in all_gfx_critical_errors:
-                dict_candidate['GFX_ERROR "' + addon_or_error + '"'] = val
+                dict_candidate['GFX_ERROR "' + clean_key + '"'] = val
                 del dict_candidate[key]
             elif key in all_app_notes:
-                dict_candidate['"' + addon_or_error + '" in app_notes'] = val
+                dict_candidate['"' + clean_key + '" in app_notes'] = val
                 del dict_candidate[key]
             elif key == 'adapter_vendor_id':
                 dict_candidate[key] = pciids.get_vendor_name(val)
@@ -561,6 +611,15 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
                 oddsratio, p = scipy.stats.fisher_exact([[count_group, total_group - elem1], [total_group - elem2, total_group - count_group]])
                 if p > alpha_k:
                     continue
+
+            # XXX: Debugging.
+            if total_group < count_group or total_reference < count_reference:
+                print(candidate)
+                print(group_name)
+                print(count_group)
+                print(total_group)
+                print(count_reference)
+                print(total_reference)
 
             # Discard element if it is not significative.
             chi2, p, dof, expected = scipy.stats.chi2_contingency([[count_group, count_reference], [total_group - count_group, total_reference - count_reference]])
