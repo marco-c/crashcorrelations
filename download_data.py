@@ -262,16 +262,15 @@ def download_crashes(versions, days, product='Firefox'):
 
     for i in range(0, days):
         for version in versions:
-            download_day_crashes(version, utils.utc_today() - timedelta(i), product)
+            download_day_crashes(version, utils.utc_today() - timedelta(1) - timedelta(i), product)
+
+
+def get_days(days):
+    return [utils.utc_today() - timedelta(1) - timedelta(i) for i in range(0, days)]
 
 
 def get_paths(versions, days, product='Firefox'):
-    last_day = utils.utc_today()
-    path = get_path(versions[0], last_day, product)
-    if not exists(path):
-        last_day -= timedelta(1)
-
-    return [get_path(version, last_day - timedelta(i), product) for i in range(0, days) for version in versions]
+    return [get_path(version, day, product) for day in get_days(days) for version in versions]
 
 
 def get_top(number, versions, days, product='Firefox'):
