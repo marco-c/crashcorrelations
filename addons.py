@@ -37,6 +37,7 @@ guids_to_names = {
     'jetpack-extension@dashlane.com': 'Dashlane',
     'searchme@mybrowserbar.com': 'SearchMe Toolbar',
     '{22119944-ED35-4ab1-910B-E619EA06A115}': 'RoboForm Toolbar for Firefox',
+    '{22181a4d-af90-4ca3-a569-faed9118d6bc}': 'Trend Micro Toolbar',
 }
 
 
