@@ -161,6 +161,7 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
         all_addons = set([addon for addon, count in addons_ref if float(count) / total_reference > min_support_diff] + [addon for group_name in group_names for addon, count in addons_groups[group_name] if float(count) / total_groups[group_name] > min_support_diff])
         print('[DONE ' + str(time.time() - t) + ']\n')
 
+
     # TODO: Once https://bugzilla.mozilla.org/show_bug.cgi?id=1311647 is fixed, stop using SuperSearch and use the Telemetry data for everything.
     # Count modules.
     all_modules = set()
@@ -173,7 +174,6 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
 
         if signatures is not None:
             found_modules = telemetry_dataset.select(['signature', 'uuid'] + [functions.explode(telemetry_dataset['json_dump']['modules']['filename']).alias('module')]).dropDuplicates(['uuid', 'module']).select(['signature', 'module']).rdd.flatMap(lambda v: [(v, 1), (v['module'], 1)] if v['signature'] in signatures else [(v['module'], 1)]).reduceByKey(lambda x, y: x + y).collect()
-
 
             modules_ref = [module for module in found_modules if not isinstance(module[0], Row)]
             modules_signatures = [module for module in found_modules if isinstance(module[0], Row)]
@@ -195,6 +195,7 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
     priors_graph = {
         'platform': ['platform_pretty_version'],
         'platform_pretty_version': ['platform_version'],
+        'platform_version': list(all_modules),
         'adapter_vendor_id': ['adapter_device_id'],
         'adapter_device_id': ['adapter_driver_version', 'adapter_driver_version_clean'],
         'adapter_driver_version': list(all_app_notes) + list(all_gfx_critical_errors),
@@ -205,6 +206,9 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
         priors_graph[addon] = [addon + '-version']
 
     def find_path(start, end, path=[]):
+        start = start.replace('.', '__DOT__')
+        end = end.replace('.', '__DOT__')
+
         path = path + [start]
 
         if start == end:
@@ -214,7 +218,7 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
             return None
 
         for node in priors_graph[start]:
-            if node in path:
+            if node.replace('.', '__DOT__') in path:
                 continue
 
             newpath = find_path(node, end, path)
@@ -371,14 +375,22 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
 
         return False
 
-    def count_candidates(candidates):
+    def count_candidates(candidates, telemetry_candidates):
         broadcastAllCandidates = sc.broadcast(set.union(*candidates.values()))
+        broadcastAllTelemetryCandidates = sc.broadcast(set.union(*telemetry_candidates.values()))
         if signatures is not None:
             broadcastCandidatesMap = sc.broadcast(candidates)
             results = dfReference.rdd.map(lambda p: (p['signature'], set(p.asDict().iteritems()))).flatMap(lambda p: [(fset, 1) for fset in broadcastAllCandidates.value if fset <= p[1]] + ([] if p[0] not in broadcastSignatures.value else [((p[0], fset), 1) for fset in broadcastCandidatesMap.value[p[0]] if fset <= p[1]])).reduceByKey(lambda x, y: x + y).filter(lambda (k, v): v >= MIN_COUNT).collect()
 
             results_ref = [r for r in results if isinstance(r[0], frozenset)]
             results_groups = dict([(signature, [(r[0][1], r[1]) for r in results if not isinstance(r[0], frozenset) and r[0][0] == signature]) for signature in signatures])
+
+            if telemetry_dataset:
+                broadcastTelemetryCandidatesMap = sc.broadcast(telemetry_candidates)
+                results = telemetry_dataset.select(['signature', 'platform', 'platform_pretty_version', 'platform_version'] + [functions.array_contains(telemetry_dataset['json_dump']['modules']['filename'], module).alias(module.replace('.', '__DOT__')) for module in all_modules]).rdd.map(lambda p: (p['signature'], set(p.asDict().iteritems()))).flatMap(lambda p: [(fset, 1) for fset in broadcastAllTelemetryCandidates.value if fset <= p[1]] + ([] if p[0] not in broadcastSignatures.value else [((p[0], fset), 1) for fset in broadcastTelemetryCandidatesMap.value[p[0]] if fset <= p[1]])).reduceByKey(lambda x, y: x + y).filter(lambda (k, v): v >= MIN_COUNT).collect()
+
+                results_ref += [r for r in results if isinstance(r[0], frozenset)]
+                results_groups.update(dict([(signature, [(r[0][1], r[1]) for r in results if not isinstance(r[0], frozenset) and r[0][0] == signature]) for signature in signatures]))
         else:
             results_ref = dfReference.rdd.map(lambda p: (p['signature'], set(p.asDict().iteritems()))).flatMap(lambda p: [(fset, 1) for fset in broadcastAllCandidates.value if fset <= p[1]]).reduceByKey(lambda x, y: x + y).filter(lambda (k, v): v >= MIN_COUNT).collect()
             results_groups = []
@@ -394,6 +406,7 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
 
     def generate_candidates(previous_candidates, level):
         candidates = {}
+        telemetry_candidates = {}
         parents = {}
 
         print('Generating level-' + str(level) + ' candidates...')
@@ -401,21 +414,21 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
 
         for group_name in group_names:
             candidates[group_name] = set()
+            telemetry_candidates[group_name] = set()
             parents[group_name] = {}
 
             for i in range(0, len(previous_candidates[group_name])):
-                # TODO: Remove once we only use data from Telemetry.
-                if list(previous_candidates[group_name][i])[0][0] in all_modules_as_columns:
-                    continue
-
                 for j in range(i + 1, len(previous_candidates[group_name])):
-                    # TODO: Remove once we only use data from Telemetry.
-                    if list(previous_candidates[group_name][j])[0][0] in all_modules_as_columns:
-                        continue
-
                     props = union(previous_candidates[group_name][i], previous_candidates[group_name][j])
                     if len(props) == level and props not in candidates[group_name]:
-                        candidates[group_name].add(props)
+                        # TODO: Remove once we only use data from Telemetry.
+                        if list(previous_candidates[group_name][i])[0][0] in all_modules_as_columns or list(previous_candidates[group_name][j])[0][0] in all_modules_as_columns:
+                            if list(previous_candidates[group_name][i])[0][0] in ['platform', 'platform_pretty_version', 'platform_version'] or list(previous_candidates[group_name][j])[0][0] in ['platform', 'platform_pretty_version', 'platform_version']:
+                                telemetry_candidates[group_name].add(props)
+                            else:
+                                continue
+                        else:
+                            candidates[group_name].add(props)
                         parents[group_name][props] = (previous_candidates[group_name][i], previous_candidates[group_name][j])
 
         print('[DONE ' + str(time.time() - t) + ']\n')
@@ -423,7 +436,7 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
 
         print('Counting level-' + str(level) + ' candidates...')
         t = time.time()
-        results_groups = count_candidates(candidates)
+        results_groups = count_candidates(candidates, telemetry_candidates)
         print('[DONE ' + str(time.time() - t) + ']\n')
 
         print('Filtering level-' + str(level) + ' candidates...')
