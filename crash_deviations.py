@@ -581,11 +581,13 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
 
                         threshold = min(0.05, min_support_diff / 2)
                         if abs(others_support_group - support_group_given_prior) > threshold or abs(others_support_reference - support_reference_given_prior) > threshold:
-                            if results[group_name][others]['prior'] is None or results[group_name][others]['prior']['support_reference'] < support_reference_given_prior:
+                            if results[group_name][others]['prior'] is None or results[group_name][others]['prior']['total_reference'] > get_count(found_prior, 'reference'):
                                 results[group_name][others]['prior'] = {
                                     'item': clean_candidate(found_prior),
-                                    'support_reference': support_reference_given_prior,
-                                    'support_group': support_group_given_prior,
+                                    'count_reference': get_count(candidate, 'reference'),
+                                    'count_group': get_count(candidate, group_name),
+                                    'total_reference': get_count(found_prior, 'reference'),
+                                    'total_group': get_count(found_prior, group_name),
                                 }
                             got_prior = True
 
@@ -664,7 +666,7 @@ def print_results(results, total_reference, total_groups, reference_name='overal
 
     def print_all(results, group_name):
         for result in results:
-            print('(' + to_percentage(result['count_group'] / total_groups[group]) + '% in ' + group_name + ' vs ' + to_percentage(result['count_reference'] / total_reference) + '% ' + reference_name + ') ' + item_to_label(result['item']) + ('' if result['prior'] is None else ' (' + to_percentage(result['prior']['support_group']) + '% vs ' + to_percentage(result['prior']['support_reference']) + '% given ' + item_to_label(result['prior']['item']) + ')'))
+            print('(' + to_percentage(result['count_group'] / total_groups[group]) + '% in ' + group_name + ' vs ' + to_percentage(result['count_reference'] / total_reference) + '% ' + reference_name + ') ' + item_to_label(result['item']) + ('' if result['prior'] is None else ' [' + to_percentage(result['prior']['count_group'] / result['prior']['total_group']) + '% vs ' + to_percentage(result['prior']['count_reference'] / result['prior']['total_reference']) + '% given ' + item_to_label(result['prior']['item']) + ']'))
 
     for group in results.keys():
         print(group)
