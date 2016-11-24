@@ -165,10 +165,9 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
     # TODO: Once https://bugzilla.mozilla.org/show_bug.cgi?id=1311647 is fixed, stop using SuperSearch and use the Telemetry data for everything.
     # Count modules.
     all_modules = set()
+    total_reference_telemetry = 0
+    total_groups_telemetry = dict()
     if telemetry_dataset is not None:
-        all_uuids = set(reference.rdd.map(lambda p: p['uuid']).collect())
-        telemetry_dataset = telemetry_dataset.filter(telemetry_dataset['uuid'].isin(all_uuids))
-
         print('Counting modules...')
         t = time.time()
 
@@ -182,6 +181,13 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
             modules_ref = telemetry_dataset.select(functions.explode(telemetry_dataset['json_dump']['modules']['filename']).alias('module')).rdd.map(lambda v: (v['module'], 1)).reduceByKey(lambda x, y: x + y).collect()
 
             modules_groups = dict([(group[0], group[1].select(functions.explode(group[1]['json_dump']['modules']['filename']).alias('module')).rdd.map(lambda v: (v['module'], 1)).reduceByKey(lambda x, y: x + y).collect()) for group in groups])
+
+        total_reference_telemetry = telemetry_dataset.count()
+        total_groups_telemetry = dict(telemetry_dataset.select('signature').filter(telemetry_dataset['signature'].isin(signatures)).groupBy('signature').count().rdd.map(lambda p: (p['signature'], p['count'])).collect())
+
+        modules_ref = [(module, count * total_reference / total_reference_telemetry) for module, count in modules_ref]
+        for group_name in group_names:
+            modules_groups[group_name] = [(module, count * total_groups[group_name] / total_groups_telemetry[group_name]) for module, count in modules_groups[group_name]]
 
         save_results(modules_ref, modules_groups)
 
@@ -389,8 +395,15 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
                 broadcastTelemetryCandidatesMap = sc.broadcast(telemetry_candidates)
                 results = telemetry_dataset.select(['signature', 'platform', 'platform_pretty_version', 'platform_version'] + [functions.array_contains(telemetry_dataset['json_dump']['modules']['filename'], module).alias(module.replace('.', '__DOT__')) for module in all_modules]).rdd.map(lambda p: (p['signature'], set(p.asDict().iteritems()))).flatMap(lambda p: [(fset, 1) for fset in broadcastAllTelemetryCandidates.value if fset <= p[1]] + ([] if p[0] not in broadcastSignatures.value else [((p[0], fset), 1) for fset in broadcastTelemetryCandidatesMap.value[p[0]] if fset <= p[1]])).reduceByKey(lambda x, y: x + y).filter(lambda (k, v): v >= MIN_COUNT).collect()
 
-                results_ref += [r for r in results if isinstance(r[0], frozenset)]
-                results_groups.update(dict([(signature, [(r[0][1], r[1]) for r in results if not isinstance(r[0], frozenset) and r[0][0] == signature]) for signature in signatures]))
+                results_telemetry_ref = [r for r in results if isinstance(r[0], frozenset)]
+                results_telemetry_groups = dict([(signature, [(r[0][1], r[1]) for r in results if not isinstance(r[0], frozenset) and r[0][0] == signature]) for signature in signatures])
+
+                results_telemetry_ref = [(r, count * total_reference / total_reference_telemetry) for r, count in results_telemetry_ref]
+                for group_name in group_names:
+                    results_telemetry_groups[group_name] = [(r, count * total_groups[group_name] / total_groups_telemetry[group_name]) for r, count in results_telemetry_groups[group_name]]
+
+                results_ref += results_telemetry_ref
+                results_groups.update(results_telemetry_groups)
         else:
             results_ref = dfReference.rdd.map(lambda p: (p['signature'], set(p.asDict().iteritems()))).flatMap(lambda p: [(fset, 1) for fset in broadcastAllCandidates.value if fset <= p[1]]).reduceByKey(lambda x, y: x + y).filter(lambda (k, v): v >= MIN_COUNT).collect()
             results_groups = []
