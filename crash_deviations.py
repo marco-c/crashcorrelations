@@ -89,14 +89,14 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
                 element = frozenset([(element.replace('.', '__DOT__'), True)])
 
             save_count(element, 0, 'reference')
-            for group_name in group_names:
-                save_count(element, 0, group_name)
 
         for element, count in results_ref:
             if isinstance(element, basestring):
                 element = frozenset([(element.replace('.', '__DOT__'), True)])
 
             save_count(element, count, 'reference')
+            for group_name in group_names:
+                save_count(element, 0, group_name)
 
         for group_name in group_names:
             for element, count in results_groups[group_name]:
@@ -120,9 +120,17 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
 
             substrings_groups = dict([(group[0], group[1].select([(functions.instr(group[1][field_name], substring.replace('__DOT__', '.')) != 0).alias(substring) for substring in substrings]).rdd.flatMap(lambda v: [(substring, 1) for substring in substrings if v[substring]]).reduceByKey(lambda x, y: x + y).collect()) for group in groups])
 
+        all_substrings_ref = set([substring for substring, count in substrings_ref if float(count) / total_reference > min_support_diff])
+        all_substrings_groups = dict([(group_name, set([substring for substring, count in substrings_groups[group_name] if float(count) / total_groups[group_name] > min_support_diff])) for group_name in group_names])
+        all_substrings = all_substrings_ref.union(*all_substrings_groups.values())
+
+        substrings_ref = [(substring, count) for substring, count in substrings_ref if substring in all_substrings]
+        for group_name in group_names:
+            substrings_groups[group_name] = [(substring, count) for substring, count in substrings_groups[group_name] if substring in all_substrings_ref.union(all_substrings_groups[group_name])]
+
         save_results(substrings_ref, substrings_groups)
 
-        return set([substring for substring, count in substrings_ref if float(count) / total_reference > min_support_diff] + [substring for group_name in group_names for substring, count in substrings_groups[group_name] if float(count) / total_groups[group_name] > min_support_diff])
+        return all_substrings
 
 
     # Count app notes
@@ -156,9 +164,16 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
 
             addons_groups = dict([(group[0], group[1].select(functions.explode(reference['addons']).alias('addon')).rdd.zipWithIndex().filter(lambda (v, i): i % 2 == 0).map(lambda (v, i): (v['addon'], 1)).reduceByKey(lambda x, y: x + y).collect()) for group in groups])
 
+        all_addons_ref = set([addon for addon, count in addons_ref if float(count) / total_reference > min_support_diff])
+        all_addons_groups = dict([(group_name, set([addon for addon, count in addons_groups[group_name] if float(count) / total_groups[group_name] > min_support_diff])) for group_name in group_names])
+        all_addons = all_addons_ref.union(*all_addons_groups.values())
+
+        addons_ref = [(addon, count) for addon, count in addons_ref if addon in all_addons]
+        for group_name in group_names:
+            addons_groups[group_name] = [(addon, count) for addon, count in addons_groups[group_name] if addon in all_addons_ref.union(all_addons_groups[group_name])]
+
         save_results(addons_ref, addons_groups)
 
-        all_addons = set([addon for addon, count in addons_ref if float(count) / total_reference > min_support_diff] + [addon for group_name in group_names for addon, count in addons_groups[group_name] if float(count) / total_groups[group_name] > min_support_diff])
         print('[DONE ' + str(time.time() - t) + ']\n')
 
 
@@ -189,9 +204,15 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
         for group_name in group_names:
             modules_groups[group_name] = [(module, count * total_groups[group_name] / total_groups_telemetry[group_name]) for module, count in modules_groups[group_name]]
 
+        all_modules_groups = dict([(group_name, set([module for module, count in modules_groups[group_name] if float(count) / total_groups[group_name] > min_support_diff * 2])) for group_name in group_names])
+        all_modules = set.union(*all_modules_groups.values())
+
+        modules_ref = [(module, count) for module, count in modules_ref if module in all_modules]
+        for group_name in group_names:
+            modules_groups[group_name] = [(module, count) for module, count in modules_groups[group_name] if module in set.union(all_modules_groups[group_name])]
+
         save_results(modules_ref, modules_groups)
 
-        all_modules = set([module for group_name in group_names for module, count in modules_groups[group_name] if float(count) / total_groups[group_name] > min_support_diff * 2])
         print('[DONE ' + str(time.time() - t) + ']\n')
 
     # TODO: Remove once we only use data from Telemetry.
