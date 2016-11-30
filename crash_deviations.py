@@ -226,6 +226,7 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
         'adapter_vendor_id': ['adapter_device_id'],
         'adapter_device_id': ['adapter_driver_version', 'adapter_driver_version_clean'],
         'adapter_driver_version': list(all_app_notes) + list(all_gfx_critical_errors),
+        'adapter_driver_version_clean': list(all_app_notes) + list(all_gfx_critical_errors),
         'CPU Info': ['cpu_microcode_version'],
     }
 
@@ -528,7 +529,7 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
             return True
 
         # We only care when submitted_from_infobar is true.
-        if elem_key == 'submitted_from_infobar' and elem_val is None:
+        if elem_key == 'submitted_from_infobar' and elem_val is not True:
             return True
 
         # Ignore addon version...
