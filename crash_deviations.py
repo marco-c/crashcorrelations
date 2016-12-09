@@ -138,7 +138,7 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
         print('Counting app_notes...')
         t = time.time()
         all_app_notes = count_substrings(app_notes.get_app_notes(), 'app_notes')
-        print('[DONE ' + str(time.time() - t) + ']\n')
+        print('[DONE ' + str(time.time() - t) + ']: ' + str(len(all_app_notes)) + '\n')
 
 
     # Count graphics critical errors.
@@ -146,7 +146,7 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
         print('Counting graphics_critical_errors...')
         t = time.time()
         all_gfx_critical_errors = count_substrings(gfx_critical_errors.get_critical_errors(), 'graphics_critical_error')
-        print('[DONE ' + str(time.time() - t) + ']\n')
+        print('[DONE ' + str(time.time() - t) + ']: ' + str(len(all_gfx_critical_errors)) + '\n')
 
 
     # Count addons.
@@ -174,7 +174,7 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
 
         save_results(addons_ref, addons_groups)
 
-        print('[DONE ' + str(time.time() - t) + ']\n')
+        print('[DONE ' + str(time.time() - t) + ']: ' + str(len(all_addons)) + '\n')
 
 
     # TODO: Once https://bugzilla.mozilla.org/show_bug.cgi?id=1311647 is fixed, stop using SuperSearch and use the Telemetry data for everything.
@@ -213,7 +213,7 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
 
         save_results(modules_ref, modules_groups)
 
-        print('[DONE ' + str(time.time() - t) + ']\n')
+        print('[DONE ' + str(time.time() - t) + ']: ' + str(len(all_modules)) + '\n')
 
     # TODO: Remove once we only use data from Telemetry.
     all_modules_as_columns = [module.replace('.', '__DOT__') for module in all_modules]
