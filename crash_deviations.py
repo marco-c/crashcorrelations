@@ -493,13 +493,13 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
     columns = [c for c in dfReference.columns if c not in get_columns('reference', dfReference.columns) and c != 'signature']
     broadcastColumns = sc.broadcast(columns)
     if signatures is not None:
-        results = dfReference.rdd.flatMap(lambda p: [(frozenset([(key,p[key])]), 1) for key in broadcastColumns.value] + ([] if p['signature'] not in broadcastSignatures.value else [((p['signature'], frozenset([(key,p[key])])), 1) for key in broadcastColumns.value])).reduceByKey(lambda x, y: x + y).filter(lambda (k, v): v >= MIN_COUNT).collect()
+        results = dfReference.select(['signature'] + columns).rdd.flatMap(lambda p: [(frozenset([(key,p[key])]), 1) for key in broadcastColumns.value] + ([] if p['signature'] not in broadcastSignatures.value else [((p['signature'], frozenset([(key,p[key])])), 1) for key in broadcastColumns.value])).reduceByKey(lambda x, y: x + y).filter(lambda (k, v): v >= MIN_COUNT).collect()
 
         results_ref += [r for r in results if isinstance(r[0], frozenset)]
         for group_name in group_names:
             results_groups[group_name] += [(r[0][1], r[1]) for r in results if not isinstance(r[0], frozenset) and r[0][0] == group_name]
     else:
-        results_ref += dfReference.rdd.flatMap(lambda p: [(frozenset([(key,p[key])]), 1) for key in broadcastColumns.value]).reduceByKey(lambda x, y: x + y).filter(lambda (k, v): v >= MIN_COUNT).collect()
+        results_ref += dfReference.select(['signature'] + columns).rdd.flatMap(lambda p: [(frozenset([(key,p[key])]), 1) for key in broadcastColumns.value]).reduceByKey(lambda x, y: x + y).filter(lambda (k, v): v >= MIN_COUNT).collect()
         for group in groups:
             results_groups[group[0]] += group[1].rdd.flatMap(lambda p: [(frozenset([(key,p[key])]), 1) for key in broadcastColumns.value]).reduceByKey(lambda x, y: x + y).filter(lambda (k, v): v >= MIN_COUNT).collect()
 
