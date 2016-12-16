@@ -3,7 +3,7 @@ import re
 from pyspark.ml.feature import Tokenizer, StopWordsRemover, CountVectorizer, IDF
 from pyspark.sql import functions
 
-from stemming.porter2 import stem
+from porter2 import stem
 
 
 def get_top_words(dataset, signatures):
