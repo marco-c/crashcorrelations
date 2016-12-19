@@ -41,7 +41,14 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
 
     if signatures is not None:
         groups = [(signature, reference.filter(reference['signature'] == signature)) for signature in signatures]
-        total_groups = dict(reference.select('signature').filter(reference['signature'].isin(signatures)).groupBy('signature').count().rdd.map(lambda p: (p['signature'], p['count'])).collect())
+        total_groups = dict(
+          reference.select('signature')\
+          .filter(reference['signature'].isin(signatures))\
+          .groupBy('signature').count()\
+          .rdd\
+          .map(lambda p: (p['signature'], p['count']))\
+          .collect()
+        )
     else:
         total_groups = dict([(group_name, group_df.count()) for group_name, group_df in groups])
 
@@ -113,15 +120,32 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
         substrings = [substring.replace('.', '__DOT__') for substring in substrings]
 
         if signatures is not None:
-            found_substrings = reference.select(['signature'] + [(functions.instr(reference[field_name], substring.replace('__DOT__', '.')) != 0).alias(str(substrings.index(substring))) for substring in substrings]).rdd.flatMap(lambda v: [(i, 1) for i in range(0, len(substrings)) if v[str(i)]] + ([] if v['signature'] not in broadcastSignatures.value else [((v['signature'], i), 1) for i in range(0, len(substrings)) if v[str(i)]])).reduceByKey(lambda x, y: x + y).filter(lambda (k, v): v >= MIN_COUNT).collect()
+            found_substrings = reference.select(['signature'] + [(functions.instr(reference[field_name], substring.replace('__DOT__', '.')) != 0).alias(str(substrings.index(substring))) for substring in substrings])\
+            .rdd\
+            .flatMap(lambda v: [(i, 1) for i in range(0, len(substrings)) if v[str(i)]] + ([] if v['signature'] not in broadcastSignatures.value else [((v['signature'], i), 1) for i in range(0, len(substrings)) if v[str(i)]]))\
+            .reduceByKey(lambda x, y: x + y)\
+            .filter(lambda (k, v): v >= MIN_COUNT)\
+            .collect()
 
             substrings_ref = [(substrings[elem[0]], elem[1]) for elem in found_substrings if isinstance(elem[0], int)]
             substrings_signatures = [elem for elem in found_substrings if not isinstance(elem[0], int)]
             substrings_groups = dict([(signature, [(substrings[i], count) for (s, i), count in substrings_signatures if s == signature]) for signature in signatures])
         else:
-            substrings_ref = reference.select([(functions.instr(reference[field_name], substring.replace('__DOT__', '.')) != 0).alias(substring) for substring in substrings]).rdd.flatMap(lambda v: [(substring, 1) for substring in substrings if v[substring]]).reduceByKey(lambda x, y: x + y).filter(lambda (k, v): v >= MIN_COUNT).collect()
+            substrings_ref = reference.select([(functions.instr(reference[field_name], substring.replace('__DOT__', '.')) != 0).alias(substring) for substring in substrings])\
+            .rdd\
+            .flatMap(lambda v: [(substring, 1) for substring in substrings if v[substring]])\
+            .reduceByKey(lambda x, y: x + y)\
+            .filter(lambda (k, v): v >= MIN_COUNT)\
+            .collect()
 
-            substrings_groups = dict([(group[0], group[1].select([(functions.instr(group[1][field_name], substring.replace('__DOT__', '.')) != 0).alias(substring) for substring in substrings]).rdd.flatMap(lambda v: [(substring, 1) for substring in substrings if v[substring]]).reduceByKey(lambda x, y: x + y).filter(lambda (k, v): v >= MIN_COUNT).collect()) for group in groups])
+            substrings_groups = dict()
+            for group in groups:
+                substrings_groups[group[0]] = group[1].select([(functions.instr(group[1][field_name], substring.replace('__DOT__', '.')) != 0).alias(substring) for substring in substrings])\
+                .rdd\
+                .flatMap(lambda v: [(substring, 1) for substring in substrings if v[substring]])\
+                .reduceByKey(lambda x, y: x + y)\
+                .filter(lambda (k, v): v >= MIN_COUNT)\
+                .collect()
 
         all_substrings_ref = set([substring for substring, count in substrings_ref if float(count) / total_reference > min_support_diff])
         all_substrings_groups = dict([(group_name, set([substring for substring, count in substrings_groups[group_name] if float(count) / total_groups[group_name] > min_support_diff])) for group_name in group_names])
@@ -159,15 +183,38 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
 
         if 'addons' in reference.columns:
             if signatures is not None:
-                found_addons = reference.select(['signature'] + [functions.explode(reference['addons']).alias('addon')]).rdd.zipWithIndex().filter(lambda (v, i): i % 2 == 0).flatMap(lambda (v, i): [(v, 1), (v['addon'], 1)] if v['signature'] in broadcastSignatures.value else [(v['addon'], 1)]).reduceByKey(lambda x, y: x + y).filter(lambda (k, v): v >= MIN_COUNT).collect()
+                found_addons = reference.select(['signature'] + [functions.explode(reference['addons']).alias('addon')])\
+                .rdd\
+                .zipWithIndex()\
+                .filter(lambda (v, i): i % 2 == 0)\
+                .flatMap(lambda (v, i): [(v, 1), (v['addon'], 1)] if v['signature'] in broadcastSignatures.value else [(v['addon'], 1)])\
+                .reduceByKey(lambda x, y: x + y)\
+                .filter(lambda (k, v): v >= MIN_COUNT)\
+                .collect()
 
                 addons_ref = [addon for addon in found_addons if not isinstance(addon[0], Row)]
                 addons_signatures = [addon for addon in found_addons if isinstance(addon[0], Row)]
                 addons_groups = dict([(signature, [(addon, count) for (s, addon), count in addons_signatures if s == signature]) for signature in signatures])
             else:
-                addons_ref = reference.select(functions.explode(reference['addons']).alias('addon')).rdd.zipWithIndex().filter(lambda (v, i): i % 2 == 0).map(lambda (v, i): (v['addon'], 1)).reduceByKey(lambda x, y: x + y).filter(lambda (k, v): v >= MIN_COUNT).collect()
+                addons_ref = reference.select(functions.explode(reference['addons']).alias('addon'))\
+                .rdd\
+                .zipWithIndex()\
+                .filter(lambda (v, i): i % 2 == 0)\
+                .map(lambda (v, i): (v['addon'], 1))\
+                .reduceByKey(lambda x, y: x + y)\
+                .filter(lambda (k, v): v >= MIN_COUNT)\
+                .collect()
 
-                addons_groups = dict([(group[0], group[1].select(functions.explode(group[1]['addons']).alias('addon')).rdd.zipWithIndex().filter(lambda (v, i): i % 2 == 0).map(lambda (v, i): (v['addon'], 1)).reduceByKey(lambda x, y: x + y).filter(lambda (k, v): v >= MIN_COUNT).collect()) for group in groups])
+                addons_groups = dict()
+                for group in groups:
+                    addons_groups[group[0]] = group[1].select(functions.explode(group[1]['addons']).alias('addon'))\
+                    .rdd\
+                    .zipWithIndex()\
+                    .filter(lambda (v, i): i % 2 == 0)\
+                    .map(lambda (v, i): (v['addon'], 1))\
+                    .reduceByKey(lambda x, y: x + y)\
+                    .filter(lambda (k, v): v >= MIN_COUNT)\
+                    .collect()
 
             all_addons_ref = set([addon for addon, count in addons_ref if float(count) / total_reference > min_support_diff])
             all_addons_groups = dict([(group_name, set([addon for addon, count in addons_groups[group_name] if float(count) / total_groups[group_name] > min_support_diff])) for group_name in group_names])
@@ -194,15 +241,34 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
         t = time.time()
 
         if signatures is not None:
-            found_modules = telemetry_dataset.select(['signature', 'uuid'] + [functions.explode(telemetry_dataset['json_dump']['modules']['filename']).alias('module')]).dropDuplicates(['uuid', 'module']).select(['signature', 'module']).rdd.flatMap(lambda v: [(v, 1), (v['module'], 1)] if v['signature'] in signatures else [(v['module'], 1)]).reduceByKey(lambda x, y: x + y).filter(lambda (k, v): v >= MIN_COUNT).collect()
+            found_modules = telemetry_dataset.select(['signature', 'uuid'] + [functions.explode(telemetry_dataset['json_dump']['modules']['filename']).alias('module')])\
+            .dropDuplicates(['uuid', 'module'])\
+            .select(['signature', 'module'])\
+            .rdd\
+            .flatMap(lambda v: [(v, 1), (v['module'], 1)] if v['signature'] in signatures else [(v['module'], 1)])\
+            .reduceByKey(lambda x, y: x + y)\
+            .filter(lambda (k, v): v >= MIN_COUNT)\
+            .collect()
 
             modules_ref = [module for module in found_modules if not isinstance(module[0], Row)]
             modules_signatures = [module for module in found_modules if isinstance(module[0], Row)]
             modules_groups = dict([(signature, [(module, count) for (s, module), count in modules_signatures if s == signature]) for signature in signatures])
         else:
-            modules_ref = telemetry_dataset.select(functions.explode(telemetry_dataset['json_dump']['modules']['filename']).alias('module')).rdd.map(lambda v: (v['module'], 1)).reduceByKey(lambda x, y: x + y).filter(lambda (k, v): v >= MIN_COUNT).collect()
+            modules_ref = telemetry_dataset.select(functions.explode(telemetry_dataset['json_dump']['modules']['filename']).alias('module'))\
+            .rdd\
+            .map(lambda v: (v['module'], 1))\
+            .reduceByKey(lambda x, y: x + y)\
+            .filter(lambda (k, v): v >= MIN_COUNT)\
+            .collect()
 
-            modules_groups = dict([(group[0], group[1].select(functions.explode(group[1]['json_dump']['modules']['filename']).alias('module')).rdd.map(lambda v: (v['module'], 1)).reduceByKey(lambda x, y: x + y).filter(lambda (k, v): v >= MIN_COUNT).collect()) for group in groups])
+            modules_groups = dict()
+            for group in groups:
+                modules_groups[group[0]] = group[1].select(functions.explode(group[1]['json_dump']['modules']['filename']).alias('module'))\
+                .rdd\
+                .map(lambda v: (v['module'], 1))\
+                .reduceByKey(lambda x, y: x + y)\
+                .filter(lambda (k, v): v >= MIN_COUNT)\
+                .collect()
 
         total_reference_telemetry = telemetry_dataset.count()
         total_groups_telemetry = dict(telemetry_dataset.select('signature').filter(telemetry_dataset['signature'].isin(signatures)).groupBy('signature').count().rdd.map(lambda p: (p['signature'], p['count'])).collect())
@@ -415,14 +481,25 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
         broadcastAllTelemetryCandidates = sc.broadcast(set.union(*telemetry_candidates.values()))
         if signatures is not None:
             broadcastCandidatesMap = sc.broadcast(candidates)
-            results = dfReference.rdd.map(lambda p: (p['signature'], set(p.asDict().iteritems()))).flatMap(lambda p: [(fset, 1) for fset in broadcastAllCandidates.value if fset <= p[1]] + ([] if p[0] not in broadcastSignatures.value else [((p[0], fset), 1) for fset in broadcastCandidatesMap.value[p[0]] if fset <= p[1]])).reduceByKey(lambda x, y: x + y).filter(lambda (k, v): v >= MIN_COUNT).collect()
+            results = dfReference.rdd\
+            .map(lambda p: (p['signature'], set(p.asDict().iteritems())))\
+            .flatMap(lambda p: [(fset, 1) for fset in broadcastAllCandidates.value if fset <= p[1]] + ([] if p[0] not in broadcastSignatures.value else [((p[0], fset), 1) for fset in broadcastCandidatesMap.value[p[0]] if fset <= p[1]]))\
+            .reduceByKey(lambda x, y: x + y)\
+            .filter(lambda (k, v): v >= MIN_COUNT)\
+            .collect()
 
             results_ref = [r for r in results if isinstance(r[0], frozenset)]
             results_groups = dict([(signature, [(r[0][1], r[1]) for r in results if not isinstance(r[0], frozenset) and r[0][0] == signature]) for signature in signatures])
 
             if telemetry_dataset:
                 broadcastTelemetryCandidatesMap = sc.broadcast(telemetry_candidates)
-                results = telemetry_dataset.select(['signature', 'platform', 'platform_pretty_version', 'platform_version'] + [functions.array_contains(telemetry_dataset['json_dump']['modules']['filename'], module).alias(module.replace('.', '__DOT__')) for module in all_modules]).rdd.map(lambda p: (p['signature'], set(p.asDict().iteritems()))).flatMap(lambda p: [(fset, 1) for fset in broadcastAllTelemetryCandidates.value if fset <= p[1]] + ([] if p[0] not in broadcastSignatures.value else [((p[0], fset), 1) for fset in broadcastTelemetryCandidatesMap.value[p[0]] if fset <= p[1]])).reduceByKey(lambda x, y: x + y).filter(lambda (k, v): v >= MIN_COUNT).collect()
+                results = telemetry_dataset.select(['signature', 'platform', 'platform_pretty_version', 'platform_version'] + [functions.array_contains(telemetry_dataset['json_dump']['modules']['filename'], module).alias(module.replace('.', '__DOT__')) for module in all_modules])\
+                .rdd\
+                .map(lambda p: (p['signature'], set(p.asDict().iteritems())))\
+                .flatMap(lambda p: [(fset, 1) for fset in broadcastAllTelemetryCandidates.value if fset <= p[1]] + ([] if p[0] not in broadcastSignatures.value else [((p[0], fset), 1) for fset in broadcastTelemetryCandidatesMap.value[p[0]] if fset <= p[1]]))\
+                .reduceByKey(lambda x, y: x + y)\
+                .filter(lambda (k, v): v >= MIN_COUNT)\
+                .collect()
 
                 results_telemetry_ref = [r for r in results if isinstance(r[0], frozenset)]
                 results_telemetry_groups = dict([(signature, [(r[0][1], r[1]) for r in results if not isinstance(r[0], frozenset) and r[0][0] == signature]) for signature in signatures])
@@ -434,12 +511,23 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
                 results_ref += results_telemetry_ref
                 results_groups.update(results_telemetry_groups)
         else:
-            results_ref = dfReference.rdd.map(lambda p: (p['signature'], set(p.asDict().iteritems()))).flatMap(lambda p: [(fset, 1) for fset in broadcastAllCandidates.value if fset <= p[1]]).reduceByKey(lambda x, y: x + y).filter(lambda (k, v): v >= MIN_COUNT).collect()
-            results_groups = []
+            results_ref = dfReference.rdd\
+            .map(lambda p: (p['signature'], set(p.asDict().iteritems())))\
+            .flatMap(lambda p: [(fset, 1) for fset in broadcastAllCandidates.value if fset <= p[1]])\
+            .reduceByKey(lambda x, y: x + y)\
+            .filter(lambda (k, v): v >= MIN_COUNT)\
+            .collect()
+
+            results_groups = dict()
             for group in groups:
                 broadcastCandidates = sc.broadcast(candidates[group[0]])
-                results_groups.append((group[0], group[1].rdd.map(lambda p: (p['signature'], set(p.asDict().iteritems()))).flatMap(lambda p: [(fset, 1) for fset in broadcastCandidates.value if fset <= p[1]]).reduceByKey(lambda x, y: x + y).filter(lambda (k, v): v >= MIN_COUNT).collect()))
-            results_groups = dict(results_groups)
+
+                results_groups[group[0]] = group[1].rdd\
+                .map(lambda p: (p['signature'], set(p.asDict().iteritems())))\
+                .flatMap(lambda p: [(fset, 1) for fset in broadcastCandidates.value if fset <= p[1]])\
+                .reduceByKey(lambda x, y: x + y)\
+                .filter(lambda (k, v): v >= MIN_COUNT)\
+                .collect()
 
         save_results(results_ref, results_groups)
 
@@ -500,15 +588,30 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
     columns = [c for c in dfReference.columns if c not in get_columns('reference', dfReference.columns) and c != 'signature']
     broadcastColumns = sc.broadcast(columns)
     if signatures is not None:
-        results = dfReference.select(['signature'] + columns).rdd.flatMap(lambda p: [(frozenset([(key,p[key])]), 1) for key in broadcastColumns.value] + ([] if p['signature'] not in broadcastSignatures.value else [((p['signature'], frozenset([(key,p[key])])), 1) for key in broadcastColumns.value])).reduceByKey(lambda x, y: x + y).filter(lambda (k, v): v >= MIN_COUNT).collect()
+        results = dfReference.select(['signature'] + columns)\
+        .rdd\
+        .flatMap(lambda p: [(frozenset([(key,p[key])]), 1) for key in broadcastColumns.value] + ([] if p['signature'] not in broadcastSignatures.value else [((p['signature'], frozenset([(key,p[key])])), 1) for key in broadcastColumns.value]))\
+        .reduceByKey(lambda x, y: x + y)\
+        .filter(lambda (k, v): v >= MIN_COUNT)\
+        .collect()
 
         results_ref += [r for r in results if isinstance(r[0], frozenset)]
         for group_name in group_names:
             results_groups[group_name] += [(r[0][1], r[1]) for r in results if not isinstance(r[0], frozenset) and r[0][0] == group_name]
     else:
-        results_ref += dfReference.select(['signature'] + columns).rdd.flatMap(lambda p: [(frozenset([(key,p[key])]), 1) for key in broadcastColumns.value]).reduceByKey(lambda x, y: x + y).filter(lambda (k, v): v >= MIN_COUNT).collect()
+        results_ref += dfReference.select(['signature'] + columns)\
+        .rdd\
+        .flatMap(lambda p: [(frozenset([(key,p[key])]), 1) for key in broadcastColumns.value])\
+        .reduceByKey(lambda x, y: x + y)\
+        .filter(lambda (k, v): v >= MIN_COUNT)\
+        .collect()
+
         for group in groups:
-            results_groups[group[0]] += group[1].rdd.flatMap(lambda p: [(frozenset([(key,p[key])]), 1) for key in broadcastColumns.value]).reduceByKey(lambda x, y: x + y).filter(lambda (k, v): v >= MIN_COUNT).collect()
+            results_groups[group[0]] += group[1].rdd\
+            .flatMap(lambda p: [(frozenset([(key,p[key])]), 1) for key in broadcastColumns.value])\
+            .reduceByKey(lambda x, y: x + y)\
+            .filter(lambda (k, v): v >= MIN_COUNT)\
+            .collect()
 
     save_results(results_ref, results_groups)
     print('[DONE ' + str(time.time() - t) + ']\n')
