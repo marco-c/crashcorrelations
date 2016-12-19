@@ -301,7 +301,7 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
         'adapter_driver_version': list(all_app_notes) + list(all_gfx_critical_errors),
         'adapter_driver_version_clean': list(all_app_notes) + list(all_gfx_critical_errors),
         'CPU Info': ['cpu_microcode_version'],
-        'startup_crash': list(all_addons) + list(all_modules),
+        'startup_crash': list(all_addons) + list(all_modules) + ['os_arch', 'shutdown_progress', 'safe_mode'],
     }
 
     for addon in all_addons:
