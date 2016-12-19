@@ -758,6 +758,9 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
                                 }
                             got_prior = True
 
+                            if abs(support_reference_given_prior - support_group_given_prior) < min_support_diff:
+                                del results[group_name][others]
+
                 if got_prior:
                     continue
 
