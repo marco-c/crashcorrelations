@@ -397,8 +397,8 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
             df = df.withColumn('CPU Info', functions.substring_index(df['cpu_info'], ' | ', 1))
             df = df.withColumn('Is Multicore', functions.substring_index(df['cpu_info'], ' | ', -1) != '1')
 
-        if 'uptime' in df.columns and 'startup_crash' not in df.columns:
-            df = df.withColumn('startup_crash', df['uptime'] <= 60)
+        if 'addons' in df.columns and 'startup_crash' not in df.columns:
+            df = df.withColumn('startup_crash', df['addons'].isNull())
 
         return df
 
@@ -499,7 +499,7 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
 
             if telemetry_dataset:
                 broadcastTelemetryCandidatesMap = sc.broadcast(telemetry_candidates)
-                results = telemetry_dataset.select(['signature', 'platform', 'platform_pretty_version', 'platform_version'] + [functions.array_contains(telemetry_dataset['json_dump']['modules']['filename'], module).alias(module.replace('.', '__DOT__')) for module in all_modules] + [(df['uptime'] <= 60).alias('startup_crash')])\
+                results = telemetry_dataset.select(['signature', 'platform', 'platform_pretty_version', 'platform_version'] + [functions.array_contains(telemetry_dataset['json_dump']['modules']['filename'], module).alias(module.replace('.', '__DOT__')) for module in all_modules] + [(df['addons'].isNull()).alias('startup_crash')])\
                 .rdd\
                 .map(lambda p: (p['signature'], set(p.asDict().iteritems())))\
                 .flatMap(lambda p: [(fset, 1) for fset in broadcastAllTelemetryCandidates.value if fset <= p[1]] + ([] if p[0] not in broadcastSignatures.value else [((p[0], fset), 1) for fset in broadcastTelemetryCandidatesMap.value[p[0]] if fset <= p[1]]))\
