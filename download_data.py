@@ -16,7 +16,7 @@ import config
 import versions
 
 
-SCHEMA_VERSION = '7'
+SCHEMA_VERSION = '8'
 AMAZON_DIR = 'marco'
 
 
@@ -186,7 +186,6 @@ def download_day_crashes(version, day, product='Firefox'):
                 'shutdown_progress',
                 'signature',
                 'submitted_from_infobar',
-                'startup_crash',
                 'theme',
                 'total_physical_memory',
                 'total_virtual_memory',
@@ -199,6 +198,11 @@ def download_day_crashes(version, day, product='Firefox'):
             '_results_offset': len(crashes),
             '_facets_size': 0,
         }
+
+        if version.startswith('50'):
+            params['_columns'].append('uptime')
+        else:
+            params['_columns'].append('startup_crash')
 
         url = 'https://crash-stats.mozilla.com/api/SuperSearch'
         headers = {}

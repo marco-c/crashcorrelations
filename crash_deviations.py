@@ -397,6 +397,9 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
             df = df.withColumn('CPU Info', functions.substring_index(df['cpu_info'], ' | ', 1))
             df = df.withColumn('Is Multicore', functions.substring_index(df['cpu_info'], ' | ', -1) != '1')
 
+        if 'uptime' in df.columns and 'startup_crash' not in df.columns:
+            df = df.withColumn('startup_crash', df['uptime'] <= 60)
+
         return df
 
 
@@ -408,6 +411,7 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
             'addons',
             'date',
             'cpu_info',
+            'uptime',
             'user_comments',
             'uuid',
         ]])
