@@ -499,7 +499,7 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
 
             if telemetry_dataset:
                 broadcastTelemetryCandidatesMap = sc.broadcast(telemetry_candidates)
-                results = telemetry_dataset.select(['signature', 'platform', 'platform_pretty_version', 'platform_version'] + [functions.array_contains(telemetry_dataset['json_dump']['modules']['filename'], module).alias(module.replace('.', '__DOT__')) for module in all_modules] + [(df['addons'].isNull()).alias('startup_crash')])\
+                results = telemetry_dataset.select(['signature', 'platform', 'platform_pretty_version', 'platform_version'] + [functions.array_contains(telemetry_dataset['json_dump']['modules']['filename'], module).alias(module.replace('.', '__DOT__')) for module in all_modules] + [(telemetry_dataset['addons'].isNull()).alias('startup_crash')])\
                 .rdd\
                 .map(lambda p: (p['signature'], set(p.asDict().iteritems())))\
                 .flatMap(lambda p: [(fset, 1) for fset in broadcastAllTelemetryCandidates.value if fset <= p[1]] + ([] if p[0] not in broadcastSignatures.value else [((p[0], fset), 1) for fset in broadcastTelemetryCandidatesMap.value[p[0]] if fset <= p[1]]))\
