@@ -165,6 +165,7 @@ def download_day_crashes(version, day, product='Firefox'):
                 'cpu_microcode_version',
                 'date',
                 'dom_ipc_enabled',
+                'e10s_cohort',
                 'gmp_plugin',
                 'graphics_critical_error',
                 'graphics_startup_test',
