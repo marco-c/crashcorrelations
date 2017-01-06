@@ -415,8 +415,7 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
             'uuid',
         ]])
 
-    # dfReference = drop_unneeded(augment(reference)).cache()
-    dfReference = drop_unneeded(augment(reference))
+    dfReference = drop_unneeded(augment(reference)).cache()
     if signatures is None:
         groups = [(group[0], drop_unneeded(augment(group[1])).cache()) for group in groups]
 
