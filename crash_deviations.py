@@ -748,37 +748,44 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
                 got_prior = False
                 for found_prior in found_priors:
                     others = frozenset.union(*[elem for elem in elems if elem != found_prior])
-                    if others in results[group_name]:
-                        # Check if with this prior the support difference is different than without the prior.
-                        count_prior_group = get_count(found_prior, group_name)
-                        count_prior_reference = get_count(found_prior, 'reference')
-                        others_support_group = get_count(others, group_name) / total_group
-                        others_support_reference = get_count(others, 'reference') / total_reference
-                        support_group_given_prior = count_group / count_prior_group
-                        support_reference_given_prior = count_reference / count_prior_reference
+                    if others not in results[group_name]:
+                        continue
 
-                        threshold = min(0.05, min_support_diff / 2)
-                        if abs(others_support_group - support_group_given_prior) > threshold or abs(others_support_reference - support_reference_given_prior) > threshold:
-                            if results[group_name][others]['prior'] is None or results[group_name][others]['prior']['total_reference'] > count_prior_reference:
-                                if list(others)[0][0] in all_modules_as_columns:
-                                    if count_group > count_prior_group:
-                                        count_prior_group = count_group
-                                    if count_reference > count_prior_reference:
-                                        count_prior_reference = count_reference
+                    # Check if with this prior the support difference is different than without the prior.
+                    count_prior_group = get_count(found_prior, group_name)
+                    count_prior_reference = get_count(found_prior, 'reference')
+                    others_support_group = get_count(others, group_name) / total_group
+                    others_support_reference = get_count(others, 'reference') / total_reference
+                    support_group_given_prior = count_group / count_prior_group
+                    support_reference_given_prior = count_reference / count_prior_reference
 
-                                results[group_name][others]['prior'] = {
-                                    'item': clean_candidate(found_prior),
-                                    'count_reference': count_reference,
-                                    'count_group': count_group,
-                                    'total_reference': count_prior_reference,
-                                    'total_group': count_prior_group,
-                                }
+                    if abs(support_reference_given_prior - support_group_given_prior) < min_support_diff:
+                        got_prior = True
+                        del results[group_name][others]
+                        continue
 
-                            got_prior = True
+                    threshold = min(0.05, min_support_diff / 2)
+                    if abs(others_support_group - support_group_given_prior) < threshold and abs(others_support_reference - support_reference_given_prior) < threshold:
+                        continue
 
-                        if abs(support_reference_given_prior - support_group_given_prior) < min_support_diff:
-                            del results[group_name][others]
-                            got_prior = True
+                    got_prior = True
+
+                    if results[group_name][others]['prior'] is not None and results[group_name][others]['prior']['total_reference'] < count_prior_reference:
+                        continue
+
+                    if list(others)[0][0] in all_modules_as_columns:
+                        if count_group > count_prior_group:
+                            count_prior_group = count_group
+                        if count_reference > count_prior_reference:
+                            count_prior_reference = count_reference
+
+                    results[group_name][others]['prior'] = {
+                        'item': clean_candidate(found_prior),
+                        'count_reference': count_reference,
+                        'count_group': count_group,
+                        'total_reference': count_prior_reference,
+                        'total_group': count_prior_group,
+                    }
 
                 if got_prior:
                     continue
