@@ -297,7 +297,7 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
         'platform_pretty_version': ['platform_version'] + list(all_app_notes),
         'platform_version': list(all_modules),
         'adapter_vendor_id': ['adapter_device_id'],
-        'adapter_device_id': ['adapter_driver_version', 'adapter_driver_version_clean'],
+        'adapter_device_id': ['adapter_driver_version', 'adapter_driver_version_clean', 'adapter_subsys_id'],
         'adapter_driver_version': list(all_app_notes) + list(all_gfx_critical_errors),
         'adapter_driver_version_clean': list(all_app_notes) + list(all_gfx_critical_errors),
         'CPU Info': ['cpu_microcode_version'],
