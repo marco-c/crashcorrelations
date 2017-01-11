@@ -770,8 +770,10 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
 
                     got_prior = True
 
-                    if results[group_name][others]['prior'] is not None and results[group_name][others]['prior']['total_reference'] < count_prior_reference:
-                        continue
+                    if results[group_name][others]['prior'] is not None:
+                        # If the support difference given this prior is larger than given another prior, skip it.
+                        if abs(support_reference_given_prior - support_group_given_prior) > abs(results[group_name][others]['prior']['count_reference'] / results[group_name][others]['prior']['total_reference'] - results[group_name][others]['prior']['count_group'] / results[group_name][others]['prior']['total_group']):
+                            continue
 
                     if list(others)[0][0] in all_modules_as_columns:
                         if count_group > count_prior_group:
