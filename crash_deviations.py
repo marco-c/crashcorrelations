@@ -300,6 +300,7 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
         'adapter_device_id': ['adapter_driver_version', 'adapter_driver_version_clean', 'adapter_subsys_id'],
         'adapter_driver_version': list(all_app_notes) + list(all_gfx_critical_errors),
         'adapter_driver_version_clean': list(all_app_notes) + list(all_gfx_critical_errors),
+        'cpu_arch': ['CPU Info'],
         'CPU Info': ['cpu_microcode_version'],
         'startup_crash': list(all_addons) + list(all_modules) + ['os_arch', 'shutdown_progress', 'safe_mode', 'ipc_channel_error', 'useragent_locale', 'adapter_vendor_id', 'adapter_device_id', 'adapter_subsys_id', 'theme', 'e10s_enabled', 'e10s_cohort', 'bios_manufacturer'] + list(all_app_notes),
     }
