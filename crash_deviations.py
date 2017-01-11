@@ -295,7 +295,7 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
     priors_graph = {
         'platform': ['platform_pretty_version'],
         'platform_pretty_version': ['platform_version'] + list(all_app_notes),
-        'platform_version': list(all_modules),
+        'platform_version': list(all_modules) + ['adapter_vendor_id'],
         'adapter_vendor_id': ['adapter_device_id'],
         'adapter_device_id': ['adapter_driver_version', 'adapter_driver_version_clean'],
         'adapter_driver_version': list(all_app_notes) + list(all_gfx_critical_errors),
