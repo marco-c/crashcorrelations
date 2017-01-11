@@ -394,7 +394,20 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
             df = df.withColumn('adapter_driver_version_clean', get_driver_version_udf(df['adapter_vendor_id'], df['adapter_driver_version']))
 
         if 'cpu_info' in df.columns:
-            df = df.withColumn('CPU Info', functions.substring_index(df['cpu_info'], ' | ', 1))
+            def get_cpu_info(cpu_info, platform):
+                if ' | ' not in cpu_info:
+                    return cpu_info
+
+                cpu_info = cpu_info[:cpu_info.index(' | ')]
+
+                if platform == 'Mac OS X':
+                    return 'GenuineIntel ' + cpu_info
+
+                return cpu_info
+
+            get_cpu_info_udf = functions.udf(get_cpu_info, StringType())
+
+            df = df.withColumn('CPU Info', get_cpu_info_udf(df['cpu_info'], df['platform']))
             df = df.withColumn('Is Multicore', functions.substring_index(df['cpu_info'], ' | ', -1) != '1')
 
         if 'addons' in df.columns and 'startup_crash' not in df.columns:
