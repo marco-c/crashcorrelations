@@ -16,7 +16,7 @@ import config
 import versions
 
 
-SCHEMA_VERSION = '9'
+SCHEMA_VERSION = '10'
 AMAZON_DIR = 'marco'
 
 
@@ -182,6 +182,7 @@ def download_day_crashes(version, day, product='Firefox'):
                 'platform_pretty_version',
                 'platform_version',
                 'plugin_version',
+                'process_type',
                 'reason',
                 'safe_mode',
                 'shutdown_progress',
