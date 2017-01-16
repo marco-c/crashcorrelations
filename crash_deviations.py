@@ -302,8 +302,8 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
         'adapter_driver_version_clean': list(all_app_notes) + list(all_gfx_critical_errors),
         'cpu_arch': ['CPU Info'],
         'CPU Info': ['cpu_microcode_version'],
-        'startup_crash': list(all_addons) + list(all_modules) + ['os_arch', 'shutdown_progress', 'safe_mode', 'ipc_channel_error', 'useragent_locale', 'adapter_vendor_id', 'adapter_device_id', 'adapter_subsys_id', 'theme', 'e10s_enabled', 'e10s_cohort', 'bios_manufacturer'] + list(all_app_notes),
-        'process_type': ['e10s_enabled'],
+        'startup_crash': list(all_addons) + list(all_modules) + ['os_arch', 'shutdown_progress', 'safe_mode', 'ipc_channel_error', 'useragent_locale', 'adapter_vendor_id', 'adapter_device_id', 'adapter_subsys_id', 'theme', 'e10s_enabled', 'e10s_cohort', 'bios_manufacturer', 'process_type'] + list(all_app_notes),
+        'process_type': ['e10s_enabled', 'startup_crash'],
     }
 
     for addon in all_addons:
@@ -713,6 +713,7 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
     results = {}
     for group_name in group_names:
         results[group_name] = {}
+        to_skip = []
 
         total_group = total_groups[group_name]
 
@@ -721,6 +722,13 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
             count_group = get_count(candidate, group_name)
             support_reference = count_reference / total_reference
             support_group = count_group / total_group
+
+            skip = False
+            for candidate_to_skip in to_skip:
+                if candidate_to_skip <= candidate:
+                    skip = True
+            if skip:
+                continue
 
             if len(candidate) > 1:
                 elems = [frozenset([item]) for item in candidate]
@@ -753,7 +761,7 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
 
                     if abs(support_reference_given_prior - support_group_given_prior) < min_support_diff:
                         got_prior = True
-                        del results[group_name][others]
+                        to_skip.append(others)
                         continue
 
                     threshold = min(0.05, min_support_diff / 2)
@@ -804,6 +812,7 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
                 if p > alpha_k:
                     continue
 
+
             # XXX: Debugging.
             if total_group < count_group or total_reference < count_reference:
                 print(candidate)
@@ -831,6 +840,14 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
                 'count_group': count_group,
                 'prior': None,
             }
+
+
+        to_skip = set(to_skip)
+        for candidate in list(results[group_name].keys()):
+            for candidate_to_skip in to_skip:
+                if candidate_to_skip <= candidate and candidate in results[group_name]:
+                    del results[group_name][candidate]
+
 
     results = dict([(group_name, list(results[group_name].values())) for group_name in group_names])
 
