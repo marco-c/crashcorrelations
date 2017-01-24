@@ -22,17 +22,12 @@ def __getVersions():
     Returns:
         dict: versions for each channel
     """
-    try:
-        resp = urlopen('https://product-details.mozilla.org/1.0/firefox_versions.json')
-        data = json.loads(resp.read().decode('utf-8'))
-        resp.close()
-    except:
-        resp = urlopen('http://svn.mozilla.org/libs/product-details/json/firefox_versions.json')
-        data = json.loads(resp.read().decode('utf-8'))
-        resp.close()
+    resp = urlopen('https://product-details.mozilla.org/1.0/firefox_versions.json')
+    data = json.loads(resp.read().decode('utf-8'))
+    resp.close()
 
     aurora = data['FIREFOX_AURORA']
-    nightly = '%d.0a1' % (__get_major(aurora) + 1)
+    nightly = data['FIREFOX_NIGHTLY']
     esr = data['FIREFOX_ESR_NEXT']
     if not esr:
         esr = data['FIREFOX_ESR']
