@@ -16,7 +16,7 @@ import config
 import versions
 
 
-SCHEMA_VERSION = '10'
+SCHEMA_VERSION = '11'
 AMAZON_DIR = 'marco'
 
 
