@@ -201,7 +201,7 @@ def download_day_crashes(version, day, product='Firefox'):
             '_facets_size': 0,
         }
 
-        if not version.startswith('50'):
+        if not version.startswith('50') and not version.startswith('45'):
             params['_columns'].append('startup_crash')
 
         if product == 'FennecAndroid':
