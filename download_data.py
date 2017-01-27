@@ -204,6 +204,19 @@ def download_day_crashes(version, day, product='Firefox'):
         if not version.startswith('50'):
             params['_columns'].append('startup_crash')
 
+        if product == 'FennecAndroid':
+            params['_columns'].extend([
+              'android_board',
+              'android_brand',
+              'android_cpu_abi',
+              'android_cpu_abi2',
+              'android_device',
+              'android_hardware',
+              'android_manufacturer',
+              'android_model',
+              'android_version',
+            ])
+
         url = 'https://crash-stats.mozilla.com/api/SuperSearch'
         headers = {}
         token = config.get('Socorro', 'token', __token)
