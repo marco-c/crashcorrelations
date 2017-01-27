@@ -302,7 +302,7 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
         'adapter_driver_version_clean': list(all_app_notes) + list(all_gfx_critical_errors),
         'cpu_arch': ['CPU Info'],
         'CPU Info': ['cpu_microcode_version'],
-        'startup_crash': list(all_addons) + list(all_modules) + ['os_arch', 'shutdown_progress', 'safe_mode', 'ipc_channel_error', 'useragent_locale', 'adapter_vendor_id', 'adapter_device_id', 'adapter_subsys_id', 'theme', 'e10s_enabled', 'e10s_cohort', 'bios_manufacturer', 'process_type'] + list(all_app_notes),
+        'startup_crash': list(all_addons) + list([a + '-version' for a in all_addons]) + list(all_modules) + ['os_arch', 'shutdown_progress', 'safe_mode', 'ipc_channel_error', 'useragent_locale', 'adapter_vendor_id', 'adapter_device_id', 'adapter_subsys_id', 'theme', 'e10s_enabled', 'e10s_cohort', 'bios_manufacturer', 'process_type'] + list(all_app_notes),
         'process_type': ['e10s_enabled', 'startup_crash'],
     }
 
@@ -334,7 +334,7 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
 
     def augment(df):
         if 'addons' in df.columns:
-            '''def get_version(addons, addon):
+            def get_version(addons, addon):
                 if addons is None:
                     return None
 
@@ -347,8 +347,7 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
             def create_get_version_udf(addon):
                 return functions.udf(lambda addons: get_version(addons, addon), StringType())
 
-            df = df.select(['*'] + [functions.array_contains(df['addons'], addon).alias(addon.replace('.', '__DOT__')) for addon in all_addons] + [create_get_version_udf(addon)(df['addons']).alias(addon.replace('.', '__DOT__') + '-version') for addon in all_addons])'''
-            df = df.select(['*'] + [functions.array_contains(df['addons'], addon).alias(addon.replace('.', '__DOT__')) for addon in all_addons])
+            df = df.select(['*'] + [functions.array_contains(df['addons'], addon).alias(addon.replace('.', '__DOT__')) for addon in all_addons] + [create_get_version_udf(addon)(df['addons']).alias(addon.replace('.', '__DOT__') + '-version') for addon in all_addons])
 
         if 'plugin_version' in df.columns:
             df = df.withColumn('plugin', df['plugin_version'].isNotNull())
