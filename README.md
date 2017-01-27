@@ -16,7 +16,7 @@ token=YOUR_TOKEN_HERE
 
 To run the CLI tool locally (useful to find correlations in crashes with a particular signature):
 ```sh
-$PATH_TO_SPARK/bin/spark-submit --master local[*] cli-signature.py [SIGNATURES] (-c [CHANNEL] or -v [VERSIONS])
+$PATH_TO_SPARK/bin/spark-submit --master local[*] cli-signature.py [SIGNATURES] (-c [CHANNEL] or -v [VERSIONS]) -p [PRODUCT]
 ```
 
 To run notebooks:
