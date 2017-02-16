@@ -7,6 +7,8 @@ from datetime import datetime
 import requests
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
+import boto3
+import botocore
 
 
 def utc_today():
@@ -54,3 +56,10 @@ def copytree(src, dst):
             copytree(s, d)
         else:
             shutil.copy2(s, d)
+
+
+def remove_results(job_name):
+    bucket = boto3.resource('s3').Bucket('telemetry-public-analysis-2')
+
+    for key in bucket.objects.filter(Prefix=job_name + '/data/'):
+        key.delete()
