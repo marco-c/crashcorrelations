@@ -404,12 +404,19 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
         if 'dom_ipc_enabled' in df.columns:
             df = df.withColumnRenamed('dom_ipc_enabled', 'e10s_enabled')
 
+        if 'memory_ghost_windows' in df.columns:
+            df = df.withColumn('ghost_windows > 0', df['memory_ghost_windows'] > 0)
+
+        if 'memory_top_none_detached' in df.columns:
+            df = df.withColumn('top(none)/detached > 0', df['memory_top_none_detached'] > 0)
+
         return df
 
 
     def drop_unneeded(df):
         return df.select([c for c in df.columns if c not in [
             'total_virtual_memory', 'total_physical_memory', 'available_virtual_memory', 'available_physical_memory', 'oom_allocation_size',
+            'memory_ghost_windows', 'memory_top_none_detached',
             'app_notes',
             'graphics_critical_error',
             'addons',

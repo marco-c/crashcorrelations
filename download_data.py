@@ -16,7 +16,7 @@ import config
 import versions
 
 
-SCHEMA_VERSION = '11'
+SCHEMA_VERSION = '12'
 AMAZON_DIR = 'marco'
 
 
@@ -195,6 +195,8 @@ def download_day_crashes(version, day, product='Firefox'):
                 'useragent_locale',
                 'user_comments',
                 'uuid',
+                'memory_ghost_windows',
+                'memory_top_none_detached',
             ],
             '_results_number': RESULTS_NUMBER,
             '_results_offset': len(crashes),
