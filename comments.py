@@ -11,12 +11,19 @@ def get_top_words(dataset, signatures):
     # Or translate comments in other languages using the free Microsoft Translate API.
     sentenceData = dataset.filter(dataset['user_comments'].isNotNull() & (dataset['useragent_locale'].isNull() | (functions.instr(dataset['useragent_locale'], 'en') == 1)))
 
+    if sentenceData.rdd.isEmpty():
+        return dict()
+
     # Tokenize comments.
     tokenizer = Tokenizer(inputCol='user_comments', outputCol='words')
     wordsData = tokenizer.transform(sentenceData)
 
     # Remove duplicate words from comments.
     wordsData = wordsData.rdd.map(lambda p: (p['signature'], list(set(p['words'])))).reduceByKey(lambda x, y: x + y).toDF(['signature', 'words'])
+
+    if wordsData.rdd.isEmpty():
+        print("[WARNING]: wordsData is empty, sentenceData wasn't.")
+        return dict()
 
     # Clean comment words by removing puntuaction and stemming.
     def clean_word(w):
