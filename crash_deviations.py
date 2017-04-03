@@ -31,7 +31,7 @@ def get_crashes(sc, versions, days, product='Firefox'):
 # TODO: Once https://bugzilla.mozilla.org/show_bug.cgi?id=1311647 is fixed, stop using SuperSearch and use the Telemetry data for everything.
 def get_telemetry_crashes(sc, versions, days, product='Firefox'):
     days = download_data.get_days(days)
-    dataset = SQLContext(sc).read.load(['s3://telemetry-parquet/socorro_crash/v1/crash_date=' + day.strftime('%Y%m%d') for day in days], 'parquet')
+    dataset = SQLContext(sc).read.load(['s3://telemetry-parquet/socorro_crash/v2/crash_date=' + day.strftime('%Y%m%d') for day in days], 'parquet')
     return dataset.filter((dataset['product'] == product) & (dataset['version'].isin(versions)))
 
 
