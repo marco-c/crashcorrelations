@@ -203,9 +203,9 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
         if addons is None:
             return None
 
-        for i in range(0, len(addons)):
-            if get_addon_name(addons[i]) == addon:
-                return get_addon_version(addons[i])
+        for a in addons:
+            if get_addon_name(a) == addon:
+                return get_addon_version(a)
 
         return 'Not installed'
 
@@ -381,32 +381,9 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
 
     def augment(df):
         if 'addons' in df.columns:
-            def get_version(addons, addon):
-                if addons is None:
-                    return None
-
-                for i in range(0, len(addons)):
-                    if get_addon_name(addons[i]) == addon:
-                        return get_addon_version(addons[i])
-
-                return 'Not installed'
-
-            def create_get_version_udf(addon):
-                return functions.udf(lambda addons: get_version(addons, addon), StringType())
-
             df = df.select(['*'] + [create_get_addon_name_udf(addon)(df['addons']).alias(addon.replace('.', '__DOT__')) for addon in all_addons] + [create_get_addon_version_udf(addon)(df['addons']).alias(addon.replace('.', '__DOT__') + '-version') for addon in all_addons])
 
         if 'json_dump' in df.columns:
-            '''def contains_module(json_dump, module):
-                if json_dump is None or 'modules' not in json_dump:
-                    return False
-
-                return any(m['filename'] == module for m in json_dump['modules'])
-
-            def create_contains_module_udf(module):
-                return functions.udf(lambda json_dump: contains_module(json_dump, module), BooleanType())
-
-            df = df.select(['*'] + [create_contains_module_udf(module)(df['json_dump']).alias(module.replace('.', '__DOT__')) for module in all_modules])'''
             df = df.select(['*'] + [functions.array_contains(df['json_dump']['modules']['filename'], module_name).alias(module_id) for module_id, module_name in module_ids.items()])
 
         if 'plugin_version' in df.columns:
