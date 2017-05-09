@@ -11,7 +11,7 @@ import math
 import time
 
 from pyspark.sql import SQLContext, Row, functions
-from pyspark.sql.types import StringType
+from pyspark.sql.types import StringType, BooleanType
 
 import download_data
 import addons
@@ -23,19 +23,13 @@ import pciids
 MIN_COUNT = 5 # 5 for chi-squared test.
 
 
-# TODO: Once https://bugzilla.mozilla.org/show_bug.cgi?id=1311647 is fixed, stop using SuperSearch and use the Telemetry data for everything.
-def get_crashes(sc, versions, days, product='Firefox'):
-    return SQLContext(sc).read.format('json').load(download_data.get_paths(versions, days, product))
-
-
-# TODO: Once https://bugzilla.mozilla.org/show_bug.cgi?id=1311647 is fixed, stop using SuperSearch and use the Telemetry data for everything.
 def get_telemetry_crashes(sc, versions, days, product='Firefox'):
     days = download_data.get_days(days)
     dataset = SQLContext(sc).read.load(['s3://telemetry-parquet/socorro_crash/v2/crash_date=' + day.strftime('%Y%m%d') for day in days], 'parquet')
     return dataset.filter((dataset['product'] == product) & (dataset['version'].isin(versions)))
 
 
-def find_deviations(sc, reference, groups=None, signatures=None, min_support_diff=0.15, min_corr=0.03, all_addons=None, all_gfx_critical_errors=None, all_app_notes=None, telemetry_dataset=None):
+def find_deviations(sc, reference, groups=None, signatures=None, min_support_diff=0.15, min_corr=0.03, all_addons=None, all_gfx_critical_errors=None, all_app_notes=None):
     if groups is None and signatures is None:
         raise Exception('Either groups or signatures should not be None')
 
@@ -177,6 +171,47 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
 
 
     # Count addons.
+
+    # Example entry: "{972ce4c6-7e08-4474-a285-3208198ce6fd} (default theme):55.0a1"
+    # TODO: Remove else branch when all addons will be in the correct format.
+    def get_addon_name(addon_string):
+        if ':' in addon_string:
+            return addon_string[:addon_string.index(':')]
+        else:
+            return None
+
+    def get_addon_version(addon_string):
+        if ':' in addon_string:
+            return addon_string[addon_string.index(':')+1:]
+        else:
+            return None
+
+    def get_addon_name_udf(addons, addon):
+        if addons is None:
+            return False
+
+        for a in addons:
+            if get_addon_name(a) == addon:
+                return True
+
+        return False
+
+    def create_get_addon_name_udf(addon):
+        return functions.udf(lambda addons: get_addon_name_udf(addons, addon), StringType())
+
+    def get_addon_version_udf(addons, addon):
+        if addons is None:
+            return None
+
+        for a in addons:
+            if get_addon_name(a) == addon:
+                return get_addon_version(a)
+
+        return 'Not installed'
+
+    def create_get_addon_version_udf(addon):
+        return functions.udf(lambda addons: get_addon_version_udf(addons, addon), StringType())
+
     if all_addons is None:
         print('Counting addons...')
         t = time.time()
@@ -185,22 +220,22 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
             if signatures is not None:
                 found_addons = reference.select(['signature'] + [functions.explode(reference['addons']).alias('addon')])\
                 .rdd\
-                .zipWithIndex()\
-                .filter(lambda (v, i): i % 2 == 0)\
-                .flatMap(lambda (v, i): [(v, 1), (v['addon'], 1)] if v['signature'] in broadcastSignatures.value else [(v['addon'], 1)])\
+                .map(lambda v: (v['signature'], get_addon_name(v['addon'])))\
+                .filter(lambda (s,a): a is not None)\
+                .flatMap(lambda v: [(v, 1), (v[1], 1)] if v[0] in broadcastSignatures.value else [(v[1], 1)])\
                 .reduceByKey(lambda x, y: x + y)\
                 .filter(lambda (k, v): v >= MIN_COUNT)\
                 .collect()
 
-                addons_ref = [addon for addon in found_addons if not isinstance(addon[0], Row)]
-                addons_signatures = [addon for addon in found_addons if isinstance(addon[0], Row)]
+                addons_ref = [addon for addon in found_addons if isinstance(addon[0], unicode)]
+                addons_signatures = [addon for addon in found_addons if not isinstance(addon[0], unicode)]
+                print(addons_ref[:3])
+                print(addons_signatures[:3])
                 addons_groups = dict([(signature, [(addon, count) for (s, addon), count in addons_signatures if s == signature]) for signature in signatures])
             else:
                 addons_ref = reference.select(functions.explode(reference['addons']).alias('addon'))\
                 .rdd\
-                .zipWithIndex()\
-                .filter(lambda (v, i): i % 2 == 0)\
-                .map(lambda (v, i): (v['addon'], 1))\
+                .map(lambda (v, i): (get_addon_name(v['addon']), 1))\
                 .reduceByKey(lambda x, y: x + y)\
                 .filter(lambda (k, v): v >= MIN_COUNT)\
                 .collect()
@@ -209,9 +244,7 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
                 for group in groups:
                     addons_groups[group[0]] = group[1].select(functions.explode(group[1]['addons']).alias('addon'))\
                     .rdd\
-                    .zipWithIndex()\
-                    .filter(lambda (v, i): i % 2 == 0)\
-                    .map(lambda (v, i): (v['addon'], 1))\
+                    .map(lambda (v, i): (get_addon_name(v['addon']), 1))\
                     .reduceByKey(lambda x, y: x + y)\
                     .filter(lambda (k, v): v >= MIN_COUNT)\
                     .collect()
@@ -231,78 +264,75 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
         print('[DONE ' + str(time.time() - t) + ']: ' + str(len(all_addons)) + '\n')
 
 
-    # TODO: Once https://bugzilla.mozilla.org/show_bug.cgi?id=1311647 is fixed, stop using SuperSearch and use the Telemetry data for everything.
     # Count modules.
     all_modules = set()
-    total_reference_telemetry = 0
-    total_groups_telemetry = dict()
-    if telemetry_dataset is not None:
-        print('Counting modules...')
-        t = time.time()
+    print('Counting modules...')
+    t = time.time()
 
-        if signatures is not None:
-            found_modules = telemetry_dataset.select(['signature', 'uuid'] + [functions.explode(telemetry_dataset['json_dump']['modules']['filename']).alias('module')])\
-            .dropDuplicates(['uuid', 'module'])\
-            .select(['signature', 'module'])\
-            .rdd\
-            .flatMap(lambda v: [(v, 1), (v['module'], 1)] if v['signature'] in signatures else [(v['module'], 1)])\
-            .reduceByKey(lambda x, y: x + y)\
-            .filter(lambda (k, v): v >= MIN_COUNT)\
-            .collect()
+    if signatures is not None:
+        found_modules = reference.select(['signature', 'uuid'] + [functions.explode(reference['json_dump']['modules']['filename']).alias('module')])\
+        .dropDuplicates(['uuid', 'module'])\
+        .select(['signature', 'module'])\
+        .rdd\
+        .flatMap(lambda v: [(v, 1), (v['module'], 1)] if v['signature'] in signatures else [(v['module'], 1)])\
+        .reduceByKey(lambda x, y: x + y)\
+        .filter(lambda (k, v): v >= MIN_COUNT)\
+        .collect()
 
-            modules_ref = [module for module in found_modules if not isinstance(module[0], Row)]
-            modules_signatures = [module for module in found_modules if isinstance(module[0], Row)]
-            modules_groups = dict([(signature, [(module, count) for (s, module), count in modules_signatures if s == signature]) for signature in signatures])
-        else:
-            modules_ref = telemetry_dataset.select(functions.explode(telemetry_dataset['json_dump']['modules']['filename']).alias('module'))\
+        modules_ref = [module for module in found_modules if not isinstance(module[0], Row)]
+        modules_signatures = [module for module in found_modules if isinstance(module[0], Row)]
+        modules_groups = dict([(signature, [(module, count) for (s, module), count in modules_signatures if s == signature]) for signature in signatures])
+    else:
+        modules_ref = reference.select(functions.explode(reference['json_dump']['modules']['filename']).alias('module'))\
+        .rdd\
+        .map(lambda v: (v['module'], 1))\
+        .reduceByKey(lambda x, y: x + y)\
+        .filter(lambda (k, v): v >= MIN_COUNT)\
+        .collect()
+
+        modules_groups = dict()
+        for group in groups:
+            modules_groups[group[0]] = group[1].select(functions.explode(group[1]['json_dump']['modules']['filename']).alias('module'))\
             .rdd\
             .map(lambda v: (v['module'], 1))\
             .reduceByKey(lambda x, y: x + y)\
             .filter(lambda (k, v): v >= MIN_COUNT)\
             .collect()
 
-            modules_groups = dict()
-            for group in groups:
-                modules_groups[group[0]] = group[1].select(functions.explode(group[1]['json_dump']['modules']['filename']).alias('module'))\
-                .rdd\
-                .map(lambda v: (v['module'], 1))\
-                .reduceByKey(lambda x, y: x + y)\
-                .filter(lambda (k, v): v >= MIN_COUNT)\
-                .collect()
+    modules_ref = [(module, count * total_reference / total_reference) for module, count in modules_ref]
+    for group_name in group_names:
+        modules_groups[group_name] = [(module, count * total_groups[group_name] / total_groups[group_name]) for module, count in modules_groups[group_name]]
 
-        total_reference_telemetry = telemetry_dataset.count()
-        total_groups_telemetry = dict(telemetry_dataset.select('signature').filter(telemetry_dataset['signature'].isin(signatures)).groupBy('signature').count().rdd.map(lambda p: (p['signature'], p['count'])).collect())
+    all_modules_groups = dict([(group_name, set([module for module, count in modules_groups[group_name] if float(count) / total_groups[group_name] > min_support_diff])) for group_name in group_names])
+    all_modules = set.union(*all_modules_groups.values())
 
-        modules_ref = [(module, count * total_reference / total_reference_telemetry) for module, count in modules_ref]
-        for group_name in group_names:
-            modules_groups[group_name] = [(module, count * total_groups[group_name] / total_groups_telemetry[group_name]) for module, count in modules_groups[group_name]]
+    module_ids = {}
+    i = 0
+    for module in all_modules:
+        module_ids['MOD' + str(i)] = module
+        i += 1
+    module_names_to_ids = {v: k for k, v in module_ids.items()}
 
-        all_modules_groups = dict([(group_name, set([module for module, count in modules_groups[group_name] if float(count) / total_groups[group_name] > min_support_diff * 2])) for group_name in group_names])
-        all_modules = set.union(*all_modules_groups.values())
+    modules_ref = [(module_names_to_ids[module], count) for module, count in modules_ref if module in all_modules]
+    for group_name in group_names:
+        modules_groups[group_name] = [(module_names_to_ids[module], count) for module, count in modules_groups[group_name] if module in set.union(all_modules_groups[group_name])]
 
-        modules_ref = [(module, count) for module, count in modules_ref if module in all_modules]
-        for group_name in group_names:
-            modules_groups[group_name] = [(module, count) for module, count in modules_groups[group_name] if module in set.union(all_modules_groups[group_name])]
+    save_results(modules_ref, modules_groups)
 
-        save_results(modules_ref, modules_groups)
-
-        print('[DONE ' + str(time.time() - t) + ']: ' + str(len(all_modules)) + '\n')
-
-    # TODO: Remove once we only use data from Telemetry.
-    all_modules_as_columns = [module.replace('.', '__DOT__') for module in all_modules]
+    print('[DONE ' + str(time.time() - t) + ']: ' + str(len(all_modules)) + '\n')
 
 
     priors_graph = {
         'platform': ['platform_pretty_version', 'adapter_vendor_id', 'bios_manufacturer', 'CPU Info', 'cpu_arch', 'os_arch'],
         'platform_pretty_version': ['platform_version'] + list(all_app_notes),
-        'platform_version': list(all_modules),
+        'platform_version': list(module_ids.keys()),
         'adapter_vendor_id': ['adapter_device_id'],
         'adapter_device_id': ['adapter_driver_version', 'adapter_driver_version_clean', 'adapter_subsys_id'],
         'adapter_driver_version': list(all_app_notes) + list(all_gfx_critical_errors),
         'adapter_driver_version_clean': list(all_app_notes) + list(all_gfx_critical_errors),
         'cpu_arch': ['CPU Info'],
         'CPU Info': ['cpu_microcode_version'],
-        'startup_crash': list(all_addons) + list([a + '-version' for a in all_addons]) + list(all_modules) + ['os_arch', 'shutdown_progress', 'safe_mode', 'ipc_channel_error', 'ipc_fatal_error_protocol', 'gmp_plugin', 'jit_category', 'accessibility', 'useragent_locale', 'adapter_vendor_id', 'adapter_device_id', 'adapter_subsys_id', 'theme', 'e10s_enabled', 'e10s_cohort', 'bios_manufacturer', 'process_type'] + list(all_app_notes),
+        'startup_crash': list(all_addons) + list([a + '-version' for a in all_addons]) + list(module_ids.keys()) + ['os_arch', 'shutdown_progress', 'safe_mode', 'ipc_channel_error', 'ipc_fatal_error_protocol', 'gmp_plugin', 'jit_category', 'accessibility', 'useragent_locale', 'adapter_vendor_id', 'adapter_device_id', 'adapter_subsys_id', 'theme', 'e10s_enabled', 'e10s_cohort', 'bios_manufacturer', 'process_type'] + list(all_app_notes),
         'process_type': ['e10s_enabled', 'startup_crash'],
     }
 
@@ -331,23 +361,30 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
 
         return None
 
+    def get_possible_priors(candidate):
+        elems = [frozenset([item]) for item in candidate]
+
+        found_priors = []
+        for prior in elems:
+            can_be_prior = True
+            for elem in elems:
+                if prior == elem:
+                    continue
+
+                can_be_prior &= find_path(list(prior)[0][0], list(elem)[0][0]) is not None
+
+            if can_be_prior:
+                found_priors.append(prior)
+
+        return found_priors
+
 
     def augment(df):
         if 'addons' in df.columns:
-            def get_version(addons, addon):
-                if addons is None:
-                    return None
+            df = df.select(['*'] + [create_get_addon_name_udf(addon)(df['addons']).alias(addon.replace('.', '__DOT__')) for addon in all_addons] + [create_get_addon_version_udf(addon)(df['addons']).alias(addon.replace('.', '__DOT__') + '-version') for addon in all_addons])
 
-                for i in range(0, len(addons), 2):
-                    if addons[i] == addon:
-                        return addons[i + 1]
-
-                return 'Not installed'
-
-            def create_get_version_udf(addon):
-                return functions.udf(lambda addons: get_version(addons, addon), StringType())
-
-            df = df.select(['*'] + [functions.array_contains(df['addons'], addon).alias(addon.replace('.', '__DOT__')) for addon in all_addons] + [create_get_version_udf(addon)(df['addons']).alias(addon.replace('.', '__DOT__') + '-version') for addon in all_addons])
+        if 'json_dump' in df.columns:
+            df = df.select(['*'] + [functions.array_contains(df['json_dump']['modules']['filename'], module_name).alias(module_id) for module_id, module_name in module_ids.items()])
 
         if 'plugin_version' in df.columns:
             df = df.withColumn('plugin', df['plugin_version'].isNotNull())
@@ -424,6 +461,21 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
             'cpu_info',
             'user_comments',
             'uuid',
+            'json_dump',
+            'additional_minidumps',
+            'classifications',
+            'crash_id',
+            'java_stack_trace',
+            'last_crash',
+            'install_age',
+            'memory_measures',
+            'memory_report',
+            'uptime',
+            'winsock_lsp',
+            'version',
+            'topmost_filenames',
+            'proto_signature',
+            'processor_notes',
         ]])
 
     dfReference = drop_unneeded(augment(reference)).cache()
@@ -431,7 +483,7 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
         groups = [(group[0], drop_unneeded(augment(group[1])).cache()) for group in groups]
 
     # dfReference.show(3)
-    # dfReference.printSchema()
+    dfReference.printSchema()
 
     def union(frozenset1, frozenset2):
         res = frozenset1.union(frozenset2)
@@ -491,9 +543,8 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
 
         return False
 
-    def count_candidates(candidates, telemetry_candidates):
+    def count_candidates(candidates):
         broadcastAllCandidates = sc.broadcast(set.union(*candidates.values()))
-        broadcastAllTelemetryCandidates = sc.broadcast(set.union(*telemetry_candidates.values()))
         if signatures is not None:
             broadcastCandidatesMap = sc.broadcast(candidates)
             results = dfReference.rdd\
@@ -505,27 +556,6 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
 
             results_ref = [r for r in results if isinstance(r[0], frozenset)]
             results_groups = dict([(signature, [(r[0][1], r[1]) for r in results if not isinstance(r[0], frozenset) and r[0][0] == signature]) for signature in signatures])
-
-            if telemetry_dataset:
-                broadcastTelemetryCandidatesMap = sc.broadcast(telemetry_candidates)
-                results = telemetry_dataset.select(['signature', 'platform', 'platform_pretty_version', 'platform_version'] + [functions.array_contains(telemetry_dataset['json_dump']['modules']['filename'], module).alias(module.replace('.', '__DOT__')) for module in all_modules] + [(telemetry_dataset['addons'].isNull()).alias('startup_crash')])\
-                .rdd\
-                .map(lambda p: (p['signature'], set(p.asDict().iteritems())))\
-                .flatMap(lambda p: [(fset, 1) for fset in broadcastAllTelemetryCandidates.value if fset <= p[1]] + ([] if p[0] not in broadcastSignatures.value else [((p[0], fset), 1) for fset in broadcastTelemetryCandidatesMap.value[p[0]] if fset <= p[1]]))\
-                .reduceByKey(lambda x, y: x + y)\
-                .filter(lambda (k, v): v >= MIN_COUNT)\
-                .collect()
-
-                results_telemetry_ref = [r for r in results if isinstance(r[0], frozenset)]
-                results_telemetry_groups = dict([(signature, [(r[0][1], r[1]) for r in results if not isinstance(r[0], frozenset) and r[0][0] == signature]) for signature in signatures])
-
-                results_telemetry_ref = [(r, count * total_reference / total_reference_telemetry) for r, count in results_telemetry_ref]
-                for group_name in group_names:
-                    results_telemetry_groups[group_name] = [(r, count * total_groups[group_name] / total_groups_telemetry[group_name]) for r, count in results_telemetry_groups[group_name]]
-
-                results_ref += results_telemetry_ref
-                for group_name in group_names:
-                    results_groups[group_name] += results_telemetry_groups[group_name]
         else:
             results_ref = dfReference.rdd\
             .map(lambda p: (p['signature'], set(p.asDict().iteritems())))\
@@ -552,7 +582,6 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
 
     def generate_candidates(previous_candidates, level):
         candidates = {}
-        telemetry_candidates = {}
         parents = {}
 
         print('Generating level-' + str(level) + ' candidates...')
@@ -560,29 +589,32 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
 
         for group_name in group_names:
             candidates[group_name] = set()
-            telemetry_candidates[group_name] = set()
             parents[group_name] = {}
 
             for i in range(0, len(previous_candidates[group_name])):
                 for j in range(i + 1, len(previous_candidates[group_name])):
                     props = union(previous_candidates[group_name][i], previous_candidates[group_name][j])
-                    if len(props) == level and props not in candidates[group_name]:
-                        # TODO: Remove once we only use data from Telemetry.
-                        if list(previous_candidates[group_name][i])[0][0] in all_modules_as_columns or list(previous_candidates[group_name][j])[0][0] in all_modules_as_columns:
-                            if list(previous_candidates[group_name][i])[0][0] in ['platform', 'platform_pretty_version', 'platform_version', 'startup_crash'] or list(previous_candidates[group_name][j])[0][0] in ['platform', 'platform_pretty_version', 'platform_version', 'startup_crash']:
-                                telemetry_candidates[group_name].add(props)
-                            else:
-                                continue
-                        else:
-                            candidates[group_name].add(props)
-                        parents[group_name][props] = (previous_candidates[group_name][i], previous_candidates[group_name][j])
+
+                    if len(props) != level:
+                        continue
+
+                    if props in candidates[group_name]:
+                        continue
+
+                    # TODO: Clean this up by doing something like "if len(get_possible_priors(props)) == 0:"
+                    if list(previous_candidates[group_name][i])[0][0] in module_ids or list(previous_candidates[group_name][j])[0][0] in module_ids:
+                        if list(previous_candidates[group_name][i])[0][0] not in ['platform', 'platform_pretty_version', 'platform_version', 'startup_crash'] or list(previous_candidates[group_name][j])[0][0] in ['platform', 'platform_pretty_version', 'platform_version', 'startup_crash']:
+                            continue
+
+                    candidates[group_name].add(props)
+                    parents[group_name][props] = (previous_candidates[group_name][i], previous_candidates[group_name][j])
 
         print('[DONE ' + str(time.time() - t) + ']\n')
         print(str(level) + ' CANDIDATES: ' + str(sum(len(candidates[group_name]) for group_name in group_names)))
 
         print('Counting level-' + str(level) + ' candidates...')
         t = time.time()
-        results_groups = count_candidates(candidates, telemetry_candidates)
+        results_groups = count_candidates(candidates)
         print('[DONE ' + str(time.time() - t) + ']\n')
 
         print('Filtering level-' + str(level) + ' candidates...')
@@ -599,9 +631,10 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
     # Generate first level candidates.
     print('Counting first level candidates...')
     t = time.time()
-    results_ref = get_first_level_results('reference', dfReference.columns + all_modules_as_columns)
-    results_groups = dict([(group_name, get_first_level_results(group_name, dfReference.columns + all_modules_as_columns)) for group_name in group_names])
+    results_ref = get_first_level_results('reference', dfReference.columns)
+    results_groups = dict([(group_name, get_first_level_results(group_name, dfReference.columns)) for group_name in group_names])
     columns = [c for c in dfReference.columns if c not in get_columns('reference', dfReference.columns) and c != 'signature']
+    print('1 CANDIDATES: ' + str(len(columns)))
     broadcastColumns = sc.broadcast(columns)
     if signatures is not None:
         results = dfReference.select(['signature'] + columns)\
@@ -697,8 +730,8 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
             elif clean_key.endswith('-version') and clean_key[:-8] in all_addons:
                 dict_candidate['Addon "' + (addons.get_addon_name(clean_key[:-8]) or clean_key[:-8]) + '" Version'] = val
                 del dict_candidate[key]
-            elif clean_key in all_modules:
-                dict_candidate['Module "' + clean_key + '"'] = val
+            elif key in module_ids:
+                dict_candidate['Module "' + module_ids[key] + '"'] = val
                 del dict_candidate[key]
             elif key in all_gfx_critical_errors:
                 dict_candidate['GFX_ERROR "' + clean_key + '"'] = val
@@ -739,17 +772,7 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
             if len(candidate) > 1:
                 elems = [frozenset([item]) for item in candidate]
 
-                found_priors = []
-                for prior in elems:
-                    can_be_prior = True
-                    for elem in elems:
-                        if prior == elem:
-                            continue
-
-                        can_be_prior &= find_path(list(prior)[0][0], list(elem)[0][0]) is not None
-
-                    if can_be_prior:
-                        found_priors.append(prior)
+                found_priors = get_possible_priors(candidate)
 
                 got_prior = False
                 for found_prior in found_priors:
@@ -780,12 +803,6 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
                         # If the support difference given this prior is larger than given another prior, skip it.
                         if abs(support_reference_given_prior - support_group_given_prior) > abs(results[group_name][others]['prior']['count_reference'] / results[group_name][others]['prior']['total_reference'] - results[group_name][others]['prior']['count_group'] / results[group_name][others]['prior']['total_group']):
                             continue
-
-                    if list(others)[0][0] in all_modules_as_columns:
-                        if count_group > count_prior_group:
-                            count_prior_group = count_group
-                        if count_reference > count_prior_reference:
-                            count_prior_reference = count_reference
 
                     results[group_name][others]['prior'] = {
                         'item': clean_candidate(found_prior),
