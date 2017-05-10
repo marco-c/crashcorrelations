@@ -487,6 +487,8 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
             'topmost_filenames',
             'proto_signature',
             'processor_notes',
+            'product',
+            'productid',
         ]])
 
     dfReference = drop_unneeded(augment(reference)).cache()
