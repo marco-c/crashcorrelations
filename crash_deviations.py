@@ -220,114 +220,113 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
     def create_get_addon_version_udf(addon):
         return functions.udf(lambda addons: get_addon_version_udf(addons, addon), StringType())
 
-    if all_addons is None:
+    if all_addons is None and 'addons' in reference.columns:
         print('Counting addons...')
         t = time.time()
 
-        if 'addons' in reference.columns:
-            if signatures is not None:
-                found_addons = reference.select(['signature'] + [functions.explode(reference['addons']).alias('addon')])\
-                .rdd\
-                .map(lambda v: (v['signature'], get_addon_name(v['addon'])))\
-                .filter(lambda (s,a): a is not None)\
-                .flatMap(lambda v: [(v, 1), (v[1], 1)] if v[0] in broadcastSignatures.value else [(v[1], 1)])\
-                .reduceByKey(lambda x, y: x + y)\
-                .filter(lambda (k, v): v >= MIN_COUNT)\
-                .collect()
+        if signatures is not None:
+            found_addons = reference.select(['signature'] + [functions.explode(reference['addons']).alias('addon')])\
+            .rdd\
+            .map(lambda v: (v['signature'], get_addon_name(v['addon'])))\
+            .filter(lambda (s,a): a is not None)\
+            .flatMap(lambda v: [(v, 1), (v[1], 1)] if v[0] in broadcastSignatures.value else [(v[1], 1)])\
+            .reduceByKey(lambda x, y: x + y)\
+            .filter(lambda (k, v): v >= MIN_COUNT)\
+            .collect()
 
-                addons_ref = [addon for addon in found_addons if isinstance(addon[0], unicode)]
-                addons_signatures = [addon for addon in found_addons if not isinstance(addon[0], unicode)]
-                print(addons_ref[:3])
-                print(addons_signatures[:3])
-                addons_groups = dict([(signature, [(addon, count) for (s, addon), count in addons_signatures if s == signature]) for signature in signatures])
-            else:
-                addons_ref = reference.select(functions.explode(reference['addons']).alias('addon'))\
+            addons_ref = [addon for addon in found_addons if isinstance(addon[0], unicode)]
+            addons_signatures = [addon for addon in found_addons if not isinstance(addon[0], unicode)]
+            addons_groups = dict([(signature, [(addon, count) for (s, addon), count in addons_signatures if s == signature]) for signature in signatures])
+        else:
+            addons_ref = reference.select(functions.explode(reference['addons']).alias('addon'))\
+            .rdd\
+            .map(lambda (v, i): (get_addon_name(v['addon']), 1))\
+            .reduceByKey(lambda x, y: x + y)\
+            .filter(lambda (k, v): v >= MIN_COUNT)\
+            .collect()
+
+            addons_groups = dict()
+            for group in groups:
+                addons_groups[group[0]] = group[1].select(functions.explode(group[1]['addons']).alias('addon'))\
                 .rdd\
                 .map(lambda (v, i): (get_addon_name(v['addon']), 1))\
                 .reduceByKey(lambda x, y: x + y)\
                 .filter(lambda (k, v): v >= MIN_COUNT)\
                 .collect()
 
-                addons_groups = dict()
-                for group in groups:
-                    addons_groups[group[0]] = group[1].select(functions.explode(group[1]['addons']).alias('addon'))\
-                    .rdd\
-                    .map(lambda (v, i): (get_addon_name(v['addon']), 1))\
-                    .reduceByKey(lambda x, y: x + y)\
-                    .filter(lambda (k, v): v >= MIN_COUNT)\
-                    .collect()
+        all_addons_ref = set([addon for addon, count in addons_ref if float(count) / total_reference > min_support_diff])
+        all_addons_groups = dict([(group_name, set([addon for addon, count in addons_groups[group_name] if float(count) / total_groups[group_name] > min_support_diff])) for group_name in group_names])
+        all_addons = all_addons_ref.union(*all_addons_groups.values())
 
-            all_addons_ref = set([addon for addon, count in addons_ref if float(count) / total_reference > min_support_diff])
-            all_addons_groups = dict([(group_name, set([addon for addon, count in addons_groups[group_name] if float(count) / total_groups[group_name] > min_support_diff])) for group_name in group_names])
-            all_addons = all_addons_ref.union(*all_addons_groups.values())
+        addons_ref = [(addon, count) for addon, count in addons_ref if addon in all_addons]
+        for group_name in group_names:
+            addons_groups[group_name] = [(addon, count) for addon, count in addons_groups[group_name] if addon in all_addons_ref.union(all_addons_groups[group_name])]
 
-            addons_ref = [(addon, count) for addon, count in addons_ref if addon in all_addons]
-            for group_name in group_names:
-                addons_groups[group_name] = [(addon, count) for addon, count in addons_groups[group_name] if addon in all_addons_ref.union(all_addons_groups[group_name])]
-
-            save_results(addons_ref, addons_groups)
-        else:
-            all_addons = set()
+        save_results(addons_ref, addons_groups)
 
         print('[DONE ' + str(time.time() - t) + ']: ' + str(len(all_addons)) + '\n')
+    else:
+        all_addons = set()
 
 
     # Count modules.
-    all_modules = set()
-    print('Counting modules...')
-    t = time.time()
+    if 'json_dump' in reference:
+        if signatures is not None:
+            print('Counting modules...')
+            t = time.time()
 
-    if signatures is not None:
-        found_modules = reference.select(['signature', 'uuid'] + [functions.explode(reference['json_dump']['modules']['filename']).alias('module')])\
-        .dropDuplicates(['uuid', 'module'])\
-        .select(['signature', 'module'])\
-        .rdd\
-        .flatMap(lambda v: [(v, 1), (v['module'], 1)] if v['signature'] in signatures else [(v['module'], 1)])\
-        .reduceByKey(lambda x, y: x + y)\
-        .filter(lambda (k, v): v >= MIN_COUNT)\
-        .collect()
+            found_modules = reference.select(['signature', 'uuid'] + [functions.explode(reference['json_dump']['modules']['filename']).alias('module')])\
+            .dropDuplicates(['uuid', 'module'])\
+            .select(['signature', 'module'])\
+            .rdd\
+            .flatMap(lambda v: [(v, 1), (v['module'], 1)] if v['signature'] in signatures else [(v['module'], 1)])\
+            .reduceByKey(lambda x, y: x + y)\
+            .filter(lambda (k, v): v >= MIN_COUNT)\
+            .collect()
 
-        modules_ref = [module for module in found_modules if not isinstance(module[0], Row)]
-        modules_signatures = [module for module in found_modules if isinstance(module[0], Row)]
-        modules_groups = dict([(signature, [(module, count) for (s, module), count in modules_signatures if s == signature]) for signature in signatures])
-    else:
-        modules_ref = reference.select(functions.explode(reference['json_dump']['modules']['filename']).alias('module'))\
-        .rdd\
-        .map(lambda v: (v['module'], 1))\
-        .reduceByKey(lambda x, y: x + y)\
-        .filter(lambda (k, v): v >= MIN_COUNT)\
-        .collect()
-
-        modules_groups = dict()
-        for group in groups:
-            modules_groups[group[0]] = group[1].select(functions.explode(group[1]['json_dump']['modules']['filename']).alias('module'))\
+            modules_ref = [module for module in found_modules if not isinstance(module[0], Row)]
+            modules_signatures = [module for module in found_modules if isinstance(module[0], Row)]
+            modules_groups = dict([(signature, [(module, count) for (s, module), count in modules_signatures if s == signature]) for signature in signatures])
+        else:
+            modules_ref = reference.select(functions.explode(reference['json_dump']['modules']['filename']).alias('module'))\
             .rdd\
             .map(lambda v: (v['module'], 1))\
             .reduceByKey(lambda x, y: x + y)\
             .filter(lambda (k, v): v >= MIN_COUNT)\
             .collect()
 
-    modules_ref = [(module, count * total_reference / total_reference) for module, count in modules_ref]
-    for group_name in group_names:
-        modules_groups[group_name] = [(module, count * total_groups[group_name] / total_groups[group_name]) for module, count in modules_groups[group_name]]
+            modules_groups = dict()
+            for group in groups:
+                modules_groups[group[0]] = group[1].select(functions.explode(group[1]['json_dump']['modules']['filename']).alias('module'))\
+                .rdd\
+                .map(lambda v: (v['module'], 1))\
+                .reduceByKey(lambda x, y: x + y)\
+                .filter(lambda (k, v): v >= MIN_COUNT)\
+                .collect()
 
-    all_modules_groups = dict([(group_name, set([module for module, count in modules_groups[group_name] if float(count) / total_groups[group_name] > min_support_diff])) for group_name in group_names])
-    all_modules = set.union(*all_modules_groups.values())
+            modules_ref = [(module, count * total_reference / total_reference) for module, count in modules_ref]
+            for group_name in group_names:
+                modules_groups[group_name] = [(module, count * total_groups[group_name] / total_groups[group_name]) for module, count in modules_groups[group_name]]
 
-    module_ids = {}
-    i = 0
-    for module in all_modules:
-        module_ids['MOD' + str(i)] = module
-        i += 1
-    module_names_to_ids = {v: k for k, v in module_ids.items()}
+        all_modules_groups = dict([(group_name, set([module for module, count in modules_groups[group_name] if float(count) / total_groups[group_name] > min_support_diff])) for group_name in group_names])
+        all_modules = set.union(*all_modules_groups.values())
 
-    modules_ref = [(module_names_to_ids[module], count) for module, count in modules_ref if module in all_modules]
-    for group_name in group_names:
-        modules_groups[group_name] = [(module_names_to_ids[module], count) for module, count in modules_groups[group_name] if module in set.union(all_modules_groups[group_name])]
+        module_ids = {}
+        i = 0
+        for module in all_modules:
+            module_ids['MOD' + str(i)] = module
+            i += 1
+        module_names_to_ids = {v: k for k, v in module_ids.items()}
 
-    save_results(modules_ref, modules_groups)
+        modules_ref = [(module_names_to_ids[module], count) for module, count in modules_ref if module in all_modules]
+        for group_name in group_names:
+            modules_groups[group_name] = [(module_names_to_ids[module], count) for module, count in modules_groups[group_name] if module in set.union(all_modules_groups[group_name])]
 
-    print('[DONE ' + str(time.time() - t) + ']: ' + str(len(all_modules)) + '\n')
+        save_results(modules_ref, modules_groups)
+
+        print('[DONE ' + str(time.time() - t) + ']: ' + str(len(all_modules)) + '\n')
+    else:
+        all_modules = set()
 
 
     priors_graph = {
