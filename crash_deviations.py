@@ -342,6 +342,9 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
         'CPU Info': ['cpu_microcode_version'],
         'startup_crash': list(all_addons) + list([a + '-version' for a in all_addons]) + list(module_ids.keys()) + ['os_arch', 'shutdown_progress', 'safe_mode', 'ipc_channel_error', 'ipc_fatal_error_protocol', 'gmp_plugin', 'jit_category', 'accessibility', 'useragent_locale', 'adapter_vendor_id', 'adapter_device_id', 'adapter_subsys_id', 'theme', 'e10s_enabled', 'e10s_cohort', 'bios_manufacturer', 'process_type'] + list(all_app_notes),
         'process_type': ['e10s_enabled', 'startup_crash'],
+        'android_hardware': list(module_ids.keys()),
+        'android_board': list(module_ids.keys()),
+        'android_manufacturer': list(module_ids.keys()),
     }
 
     for addon in all_addons:
