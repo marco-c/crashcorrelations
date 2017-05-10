@@ -26,6 +26,14 @@ MIN_COUNT = 5 # 5 for chi-squared test.
 def get_telemetry_crashes(sc, versions, days, product='Firefox'):
     days = download_data.get_days(days)
     dataset = SQLContext(sc).read.load(['s3://telemetry-parquet/socorro_crash/v2/crash_date=' + day.strftime('%Y%m%d') for day in days], 'parquet')
+
+    if product != 'FennecAndroid':
+        dataset = dataset.select([c for c in dataset.columns if c not in [
+            'android_board', 'android_brand', 'android_cpu_abi', 'android_cpu_abi2',
+            'android_device', 'android_hardware', 'android_manufacturer',
+            'android_model', 'android_version',
+        ]])
+
     return dataset.filter((dataset['product'] == product) & (dataset['version'].isin(versions)))
 
 
