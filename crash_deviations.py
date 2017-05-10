@@ -483,7 +483,7 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
         groups = [(group[0], drop_unneeded(augment(group[1])).cache()) for group in groups]
 
     # dfReference.show(3)
-    dfReference.printSchema()
+    # dfReference.printSchema()
 
     def union(frozenset1, frozenset2):
         res = frozenset1.union(frozenset2)
