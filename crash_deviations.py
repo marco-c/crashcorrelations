@@ -270,7 +270,7 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
 
 
     # Count modules.
-    if 'json_dump' in reference:
+    if 'json_dump' in reference.columns:
         if signatures is not None:
             print('Counting modules...')
             t = time.time()
