@@ -408,10 +408,13 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
         if 'total_virtual_memory' in df.columns and 'platform_version' in df.columns and 'platform' in df.columns:
             def get_arch(total_virtual_memory, platform, platform_version):
                 if total_virtual_memory:
-                    if int(total_virtual_memory) < 2684354560:
-                        return 'x86'
-                    elif int(total_virtual_memory) > 2684354560:
-                        return 'amd64'
+                    try:
+                        if int(total_virtual_memory) < 2684354560:
+                            return 'x86'
+                        else:
+                            return 'amd64'
+                    except:
+                        return 'unknown'
                 elif platform == 'Mac OS X':
                     return 'amd64'
                 else:
