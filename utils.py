@@ -3,7 +3,7 @@ import errno
 import json
 import gzip
 import shutil
-from datetime import datetime
+from datetime import datetime, timedelta
 import requests
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
@@ -16,7 +16,7 @@ def utc_today():
 
 
 def get_days(days):
-    return [utils.utc_today() - timedelta(1) - timedelta(i) for i in range(0, days)]
+    return [utc_today() - timedelta(1) - timedelta(i) for i in range(0, days)]
 
 
 def get_with_retries(url, params=None, headers=None):
