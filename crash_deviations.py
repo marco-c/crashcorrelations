@@ -16,7 +16,6 @@ from pyspark.sql.types import StringType, BooleanType
 import addons
 import gfx_critical_errors
 import app_notes
-import pciids
 import utils
 
 
@@ -751,10 +750,6 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
             elif key in all_app_notes:
                 dict_candidate['"' + clean_key + '" in app_notes'] = val
                 del dict_candidate[key]
-            elif key == 'adapter_vendor_id':
-                dict_candidate[key] = pciids.get_vendor_name(val)
-            elif key == 'adapter_device_id' and 'adapter_vendor_id' in transformed_candidate:
-                dict_candidate[key] = pciids.get_device_name(transformed_candidate['adapter_vendor_id'], val)
         return dict_candidate
 
     print('Final rules filtering...')
