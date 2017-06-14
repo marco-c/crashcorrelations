@@ -13,18 +13,18 @@ import time
 from pyspark.sql import SQLContext, Row, functions
 from pyspark.sql.types import StringType, BooleanType
 
-import download_data
 import addons
 import gfx_critical_errors
 import app_notes
 import pciids
+import utils
 
 
 MIN_COUNT = 5 # 5 for chi-squared test.
 
 
 def get_telemetry_crashes(sc, versions, days, product='Firefox'):
-    days = download_data.get_days(days)
+    days = utils.get_days(days)
     dataset = SQLContext(sc).read.load(['s3://telemetry-parquet/socorro_crash/v2/crash_date=' + day.strftime('%Y%m%d') for day in days], 'parquet')
 
     if product != 'FennecAndroid':

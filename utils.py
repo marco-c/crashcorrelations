@@ -15,6 +15,10 @@ def utc_today():
     return datetime.utcnow().date()
 
 
+def get_days(days):
+    return [utils.utc_today() - timedelta(1) - timedelta(i) for i in range(0, days)]
+
+
 def get_with_retries(url, params=None, headers=None):
     retries = Retry(total=16, backoff_factor=1, status_forcelist=[429])
 
