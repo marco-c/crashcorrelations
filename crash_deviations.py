@@ -448,9 +448,6 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
             df = df.withColumn('CPU Info', functions.substring_index(df['cpu_info'], ' | ', 1))
             df = df.withColumn('Is Multicore', functions.substring_index(df['cpu_info'], ' | ', -1) != '1')
 
-        if 'addons' in df.columns and 'startup_crash' not in df.columns:
-            df = df.withColumn('startup_crash', df['addons'].isNull())
-
         if 'dom_ipc_enabled' in df.columns:
             df = df.withColumnRenamed('dom_ipc_enabled', 'e10s_enabled')
 
