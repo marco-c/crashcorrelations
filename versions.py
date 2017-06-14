@@ -26,7 +26,6 @@ def __getVersions():
     data = json.loads(resp.read().decode('utf-8'))
     resp.close()
 
-    aurora = data['FIREFOX_AURORA']
     nightly = data['FIREFOX_NIGHTLY']
     esr = data['FIREFOX_ESR_NEXT']
     if not esr:
@@ -36,7 +35,6 @@ def __getVersions():
 
     return {'release': data['LATEST_FIREFOX_VERSION'],
             'beta': data['LATEST_FIREFOX_RELEASED_DEVEL_VERSION'],
-            'aurora': str(aurora),
             'nightly': nightly,
             'esr': esr}
 
