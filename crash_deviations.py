@@ -257,9 +257,9 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
         all_addons_groups = dict([(group_name, set([addon for addon, count in addons_groups[group_name] if float(count) / total_groups[group_name] > min_support_diff])) for group_name in group_names])
         all_addons = all_addons_ref.union(*all_addons_groups.values())
 
-        addons_ref = [(addon, count) for addon, count in addons_ref if addon in all_addons]
+        addons_ref = [(addon, count if count < total_reference else total_reference) for addon, count in addons_ref if addon in all_addons]
         for group_name in group_names:
-            addons_groups[group_name] = [(addon, count) for addon, count in addons_groups[group_name] if addon in all_addons_ref.union(all_addons_groups[group_name])]
+            addons_groups[group_name] = [(addon, count if count < total_groups[group_name] else total_groups[group_name]) for addon, count in addons_groups[group_name] if addon in all_addons_ref.union(all_addons_groups[group_name])]
 
         save_results(addons_ref, addons_groups)
 
