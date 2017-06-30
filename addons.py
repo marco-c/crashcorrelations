@@ -43,13 +43,16 @@ guids_to_names = {
 
 
 def get_addon_name(guid):
-    if guid in guids_to_names:
-        return guids_to_names[guid]
+    try:
+        if guid in guids_to_names:
+            return guids_to_names[guid]
 
-    r = requests.get('https://services.addons.mozilla.org/en-US/firefox/api/1.5/search/guid:' + guid)
+        r = requests.get('https://services.addons.mozilla.org/en-US/firefox/api/1.5/search/guid:' + guid)
 
-    el = ET.fromstring(r.content).find('./addon/name')
-    if el is None or el.text is None:
-        return None
+        el = ET.fromstring(r.content).find('./addon/name')
+        if el is None or el.text is None:
+            return None
 
-    return el.text.encode('utf-8')
+        return el.text.encode('utf-8')
+    except:
+        return guid
