@@ -5,11 +5,12 @@
 
 import argparse
 import re
-import requests
+
+import utils
 
 
 def query_dxr(q):
-    r = requests.get('https://dxr.mozilla.org/mozilla-central/search', params={
+    r = utils.get_with_retries('https://dxr.mozilla.org/mozilla-central/search', params={
         'q': q,
         'limit': 1000
     }, headers={
