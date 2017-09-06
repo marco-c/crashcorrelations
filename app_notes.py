@@ -24,16 +24,20 @@ def query_dxr(q):
     return r.json()
 
 
+app_notes = None
 def get_app_notes():
-    results = query_dxr('ScopedGfxFeatureReporter ')['results']
+    global app_notes
 
-    matches = [re.search(r'"(.*?)"', line['line']) for result in results for line in result['lines']]
+    if app_notes is None:
+        results = query_dxr('ScopedGfxFeatureReporter ')['results']
 
-    errors = [match.group(1) for match in matches if match is not None]
+        matches = [re.search(r'"(.*?)"', line['line']) for result in results for line in result['lines']]
 
-    # Remove duplicates and remove wrongly reported string.
-    errors = set([error for error in errors if error != 'gfxCrashReporterUtils.h'])
+        app_notes = [match.group(1) for match in matches if match is not None]
 
-    errors = sum([[error + '?', error + '-', error + '+'] for error in errors], [])
+        # Remove duplicates and remove wrongly reported string.
+        app_notes = set([app_note for app_note in app_notes if app_note != 'gfxCrashReporterUtils.h'])
 
-    return errors
+        app_notes = sum([[app_note + '?', app_note + '-', app_note + '+'] for app_note in app_notes], [])
+
+    return app_notes

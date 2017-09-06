@@ -24,11 +24,17 @@ def query_dxr(q):
     return r.json()
 
 
+errors = None
 def get_critical_errors():
-    results = query_dxr('gfxCriticalError(')['results'] + query_dxr('gfxCriticalNote <<')['results'] + query_dxr('gfxCriticalErrorOnce(')['results']
+    global errors
 
-    matches = [re.search(r'"(.*?)"', line['line']) for result in results for line in result['lines']]
+    if errors is None:
+        results = query_dxr('gfxCriticalError(')['results'] + query_dxr('gfxCriticalNote <<')['results'] + query_dxr('gfxCriticalErrorOnce(')['results']
 
-    errors = [match.group(1) for match in matches if match is not None]
+        matches = [re.search(r'"(.*?)"', line['line']) for result in results for line in result['lines']]
 
-    return set([error for error in errors if error != ', '])
+        errors = [match.group(1) for match in matches if match is not None]
+
+        errors = set([error for error in errors if error != ', '])
+
+    return errors
