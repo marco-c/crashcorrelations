@@ -64,6 +64,9 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
         broadcastSignatures = sc.broadcast(set(signatures))
 
 
+    print('Total number of crashes: %d.' % total_reference)
+
+
     saved_counts = {}
 
 
