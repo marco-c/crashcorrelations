@@ -19,7 +19,7 @@ import app_notes
 import utils
 
 
-MIN_COUNT = 5 # 5 for chi-squared test.
+MIN_COUNT = 5  # 5 for chi-squared test.
 
 
 def get_telemetry_crashes(sc, versions, days, product='Firefox'):
@@ -43,12 +43,12 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
     if signatures is not None:
         groups = [(signature, reference.filter(reference['signature'] == signature)) for signature in signatures]
         total_groups = dict(
-          reference.select('signature')\
-          .filter(reference['signature'].isin(signatures))\
-          .groupBy('signature').count()\
-          .rdd\
-          .map(lambda p: (p['signature'], p['count']))\
-          .collect()
+            reference.select('signature')
+            .filter(reference['signature'].isin(signatures))
+            .groupBy('signature').count()
+            .rdd
+            .map(lambda p: (p['signature'], p['count']))
+            .collect()
         )
     else:
         total_groups = dict([(group_name, group_df.count()) for group_name, group_df in groups])
@@ -79,7 +79,7 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
     def get_first_level_results(df, columns):
         if df not in saved_counts:
             return []
-        return [(k,v) for k,v in saved_counts[df].items() if len(k) == 1 and list(k)[0][0] in columns]
+        return [(k, v) for k, v in saved_counts[df].items() if len(k) == 1 and list(k)[0][0] in columns]
 
 
     def save_count(candidate, count, df):
@@ -192,7 +192,7 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
 
     def get_addon_version(addon_string):
         if ':' in addon_string:
-            return addon_string[addon_string.index(':')+1:]
+            return addon_string[addon_string.index(':') + 1:]
         else:
             return None
 
@@ -230,7 +230,7 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
             found_addons = reference.select(['signature'] + [functions.explode(reference['addons']).alias('addon')])\
             .rdd\
             .map(lambda v: (v['signature'], get_addon_name(v['addon'])))\
-            .filter(lambda (s,a): a is not None)\
+            .filter(lambda (s, a): a is not None)\
             .flatMap(lambda v: [(v, 1), (v[1], 1)] if v[0] in broadcastSignatures.value else [(v[1], 1)])\
             .reduceByKey(lambda x, y: x + y)\
             .filter(lambda (k, v): v >= MIN_COUNT)\
@@ -435,7 +435,7 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
                 #      in those cases these rules are not valid (e.g. 6.1.7600.16385).
                 if adapter_driver_version:
                     if adapter_vendor_id == '0x8086' or adapter_vendor_id == '8086':
-                        return adapter_driver_version[adapter_driver_version.rfind('.')+1:]
+                        return adapter_driver_version[adapter_driver_version.rfind('.') + 1:]
                     elif adapter_vendor_id == '0x10de' or adapter_vendor_id == '10de':
                         return adapter_driver_version[-6:-5] + adapter_driver_version[-4:-2] + '.' + adapter_driver_version[-2:]
                     # TODO: AMD?
@@ -639,7 +639,7 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
         return filtered_candidates
 
     candidates = {
-      1: dict([(group_name, []) for group_name in group_names])
+        1: dict([(group_name, []) for group_name in group_names])
     }
 
     # Generate first level candidates.
@@ -653,7 +653,7 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
     if signatures is not None:
         results = dfReference.select(['signature'] + columns)\
         .rdd\
-        .flatMap(lambda p: [(frozenset([(key,p[key])]), 1) for key in broadcastColumns.value] + ([] if p['signature'] not in broadcastSignatures.value else [((p['signature'], frozenset([(key,p[key])])), 1) for key in broadcastColumns.value]))\
+        .flatMap(lambda p: [(frozenset([(key, p[key])]), 1) for key in broadcastColumns.value] + ([] if p['signature'] not in broadcastSignatures.value else [((p['signature'], frozenset([(key, p[key])])), 1) for key in broadcastColumns.value]))\
         .reduceByKey(lambda x, y: x + y)\
         .filter(lambda (k, v): v >= MIN_COUNT)\
         .collect()
@@ -664,14 +664,14 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
     else:
         results_ref += dfReference.select(['signature'] + columns)\
         .rdd\
-        .flatMap(lambda p: [(frozenset([(key,p[key])]), 1) for key in broadcastColumns.value])\
+        .flatMap(lambda p: [(frozenset([(key, p[key])]), 1) for key in broadcastColumns.value])\
         .reduceByKey(lambda x, y: x + y)\
         .filter(lambda (k, v): v >= MIN_COUNT)\
         .collect()
 
         for group in groups:
             results_groups[group[0]] += group[1].rdd\
-            .flatMap(lambda p: [(frozenset([(key,p[key])]), 1) for key in broadcastColumns.value])\
+            .flatMap(lambda p: [(frozenset([(key, p[key])]), 1) for key in broadcastColumns.value])\
             .reduceByKey(lambda x, y: x + y)\
             .filter(lambda (k, v): v >= MIN_COUNT)\
             .collect()
@@ -692,13 +692,13 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
     def ignore_rule(candidate, candidates, group_name):
         elem_key, elem_val = list(candidate)[0]
 
-        if elem_val == False and frozenset([(elem_key, True)]) in candidates:
+        if elem_val is False and frozenset([(elem_key, True)]) in candidates:
             return True
 
-        if elem_val == None and frozenset([(elem_key, u'1')]) in candidates:
+        if elem_val is None and frozenset([(elem_key, u'1')]) in candidates:
             return True
 
-        if elem_val == None and frozenset([(elem_key, u'Active')]) in candidates:
+        if elem_val is None and frozenset([(elem_key, u'Active')]) in candidates:
             return True
 
         # We only care when submitted_from_infobar is true.
@@ -730,7 +730,7 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
         print(str(l) + ' RULES: ' + str(sum(len(candidates[l][group_name]) for group_name in group_names)))
 
 
-    all_candidates = dict([(group_name, sum([candidates[i][group_name] for i in range(1,l+1)], [])) for group_name in group_names])
+    all_candidates = dict([(group_name, sum([candidates[i][group_name] for i in range(1, l + 1)], [])) for group_name in group_names])
 
 
     def clean_candidate(candidate):
@@ -857,7 +857,7 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
 
             # Discard element if it is not significative.
             chi2, p, dof, expected = scipy.stats.chi2_contingency([[count_group, count_reference], [total_group - count_group, total_reference - count_reference]])
-            #oddsration, p = scipy.stats.fisher_exact([[count_group, count_reference], [total_group - count_group, total_reference - count_reference]])
+            # oddsration, p = scipy.stats.fisher_exact([[count_group, count_reference], [total_group - count_group, total_reference - count_reference]])
             num_candidates = len(candidates[len(candidate)][group_name])
             alpha_k = min((alpha / pow(2, len(candidate))) / num_candidates, alpha_k)
             if p > alpha_k:
