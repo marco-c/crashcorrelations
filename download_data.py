@@ -32,14 +32,24 @@ def get_versions(channel, product='Firefox'):
     channel = channel.lower()
     version = str(versions.get(base=True)[channel])
 
-    r = utils.get_with_retries('https://crash-stats.mozilla.com/api/ProductVersions', params={
-        'product': product,
-        'active': True,
-        'is_rapid_beta': False,
-    })
+    if channel == 'nightly':
+        return ['{}a1'.format(version)]
+    elif channel == 'release':
+        return ['{}'.format(version)] + ['{}{}'.format(version, i) for i in range(1, 7)]
+    elif channel == 'beta':
+        return ['{}.0b{}'.format(version, i) for i in range(0, 99)]
+    else:
+        assert False, 'Unknown channel {}'.format(channel)
 
-    if r.status_code != 200:
-        print(r.text)
-        raise Exception(r)
+    # TODO: Switch to buildhub to get the good old behavior back.
+    # r = utils.get_with_retries('https://crash-stats.mozilla.com/api/ProductVersions', params={
+    #     'product': product,
+    #     'active': True,
+    #     'is_rapid_beta': False,
+    # })
 
-    return [result['version'] for result in r.json()['hits'] if result['version'].startswith(version) and result['build_type'] == channel]
+    # if r.status_code != 200:
+    #     print(r.text)
+    #     raise Exception(r)
+
+    # return [result['version'] for result in r.json()['hits'] if result['version'].startswith(version) and result['build_type'] == channel]
