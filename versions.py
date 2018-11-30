@@ -52,3 +52,17 @@ def get(base=False):
         return res
 
     return __versions
+
+
+def getStabilityReleases(base):
+    r = requests.get('https://product-details.mozilla.org/1.0/firefox_history_stability_releases.json')
+    data = r.json()
+
+    return [v for v in data.keys() if v.startswith(base + '.')]
+
+
+def getDevelopmentReleases(base):
+    r = requests.get('https://product-details.mozilla.org/1.0/firefox_history_development_releases.json')
+    data = r.json()
+
+    return [v for v in data.keys() if v.startswith(base + '.')]
