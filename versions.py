@@ -2,11 +2,8 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this file,
 # You can obtain one at http://mozilla.org/MPL/2.0/.
 
-try:
-    from urllib.request import urlopen
-except ImportError:
-    from urllib import urlopen
 import json
+import requests
 
 
 __versions = None
@@ -22,9 +19,8 @@ def __getVersions():
     Returns:
         dict: versions for each channel
     """
-    resp = urlopen('https://product-details.mozilla.org/1.0/firefox_versions.json')
-    data = json.loads(resp.read().decode('utf-8'))
-    resp.close()
+    r = requests.get('https://product-details.mozilla.org/1.0/firefox_versions.json')
+    data = r.json()
 
     nightly = data['FIREFOX_NIGHTLY']
     esr = data['FIREFOX_ESR_NEXT']
