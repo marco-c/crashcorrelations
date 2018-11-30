@@ -34,7 +34,7 @@ def get_versions(channel, product='Firefox'):
 
     if channel == 'nightly':
         return ['{}.0a1'.format(version)]
-    elif channel == 'release':
+    elif channel in ['release', 'esr']:
         return ['{}.0'.format(version)] + versions.getStabilityReleases(version)
     elif channel == 'beta':
         return versions.getDevelopmentReleases(version)
