@@ -30,14 +30,14 @@ def get_top(number, versions, days, product='Firefox'):
 
 def get_versions(channel, product='Firefox'):
     channel = channel.lower()
-    version = str(versions.get(base=True)[channel])
+    version = str(versions.get(product, base=True)[channel])
 
     if channel == 'nightly':
         return ['{}.0a1'.format(version)]
     elif channel in ['release', 'esr']:
-        return ['{}.0'.format(version)] + versions.getStabilityReleases(version)
+        return ['{}.0'.format(version)] + versions.getStabilityReleases(product, version)
     elif channel == 'beta':
-        return versions.getDevelopmentReleases(version)
+        return versions.getDevelopmentReleases(product, version)
     else:
         assert False, 'Unknown channel {}'.format(channel)
 
