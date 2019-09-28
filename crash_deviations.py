@@ -128,7 +128,7 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
             .rdd\
             .flatMap(lambda v: [(i, 1) for i in range(0, len(substrings)) if v[str(i)]] + ([] if v['signature'] not in broadcastSignatures.value else [((v['signature'], i), 1) for i in range(0, len(substrings)) if v[str(i)]]))\
             .reduceByKey(lambda x, y: x + y)\
-            .filter(lambda (k, v): v >= MIN_COUNT)\
+            .filter(lambda k_v: k_v[1] >= MIN_COUNT)\
             .collect()
 
             substrings_ref = [(substrings[elem[0]], elem[1]) for elem in found_substrings if isinstance(elem[0], int)]
@@ -139,7 +139,7 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
             .rdd\
             .flatMap(lambda v: [(substring, 1) for substring in substrings if v[substring]])\
             .reduceByKey(lambda x, y: x + y)\
-            .filter(lambda (k, v): v >= MIN_COUNT)\
+            .filter(lambda k_v: k_v[1] >= MIN_COUNT)\
             .collect()
 
             substrings_groups = dict()
@@ -148,7 +148,7 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
                 .rdd\
                 .flatMap(lambda v: [(substring, 1) for substring in substrings if v[substring]])\
                 .reduceByKey(lambda x, y: x + y)\
-                .filter(lambda (k, v): v >= MIN_COUNT)\
+                .filter(lambda k_v: k_v[1] >= MIN_COUNT)\
                 .collect()
 
         all_substrings_ref = set([substring for substring, count in substrings_ref if float(count) / total_reference > min_support_diff])
@@ -230,10 +230,10 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
             found_addons = reference.select(['signature'] + [functions.explode(reference['addons']).alias('addon')])\
             .rdd\
             .map(lambda v: (v['signature'], get_addon_name(v['addon'])))\
-            .filter(lambda (s, a): a is not None)\
+            .filter(lambda s_a: s_a[1] is not None)\
             .flatMap(lambda v: [(v, 1), (v[1], 1)] if v[0] in broadcastSignatures.value else [(v[1], 1)])\
             .reduceByKey(lambda x, y: x + y)\
-            .filter(lambda (k, v): v >= MIN_COUNT)\
+            .filter(lambda k_v: k_v[1] >= MIN_COUNT)\
             .collect()
 
             addons_ref = [addon for addon in found_addons if isinstance(addon[0], unicode)]
@@ -242,18 +242,18 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
         else:
             addons_ref = reference.select(functions.explode(reference['addons']).alias('addon'))\
             .rdd\
-            .map(lambda (v, i): (get_addon_name(v['addon']), 1))\
+            .map(lambda v_i: (get_addon_name(v_i[0]['addon']), 1))\
             .reduceByKey(lambda x, y: x + y)\
-            .filter(lambda (k, v): v >= MIN_COUNT)\
+            .filter(lambda k_v: k_v[1] >= MIN_COUNT)\
             .collect()
 
             addons_groups = dict()
             for group in groups:
                 addons_groups[group[0]] = group[1].select(functions.explode(group[1]['addons']).alias('addon'))\
                 .rdd\
-                .map(lambda (v, i): (get_addon_name(v['addon']), 1))\
+                .map(lambda v_i: (get_addon_name(v_i[0]['addon']), 1))\
                 .reduceByKey(lambda x, y: x + y)\
-                .filter(lambda (k, v): v >= MIN_COUNT)\
+                .filter(lambda k_v: k_v[1] >= MIN_COUNT)\
                 .collect()
 
         all_addons_ref = set([addon for addon, count in addons_ref if float(count) / total_reference > min_support_diff])
@@ -283,7 +283,7 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
             .rdd\
             .flatMap(lambda v: [(v, 1), (v['module'], 1)] if v['signature'] in signatures else [(v['module'], 1)])\
             .reduceByKey(lambda x, y: x + y)\
-            .filter(lambda (k, v): v >= MIN_COUNT)\
+            .filter(lambda k_v: k_v[1] >= MIN_COUNT)\
             .collect()
 
             modules_ref = [module for module in found_modules if not isinstance(module[0], Row)]
@@ -294,7 +294,7 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
             .rdd\
             .map(lambda v: (v['module'], 1))\
             .reduceByKey(lambda x, y: x + y)\
-            .filter(lambda (k, v): v >= MIN_COUNT)\
+            .filter(lambda k_v: k_v[1] >= MIN_COUNT)\
             .collect()
 
             modules_groups = dict()
@@ -303,7 +303,7 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
                 .rdd\
                 .map(lambda v: (v['module'], 1))\
                 .reduceByKey(lambda x, y: x + y)\
-                .filter(lambda (k, v): v >= MIN_COUNT)\
+                .filter(lambda k_v: k_v[1] >= MIN_COUNT)\
                 .collect()
 
             modules_ref = [(module, count * total_reference / total_reference) for module, count in modules_ref]
@@ -565,7 +565,7 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
             .map(lambda p: (p['signature'], set(p.asDict().iteritems())))\
             .flatMap(lambda p: [(fset, 1) for fset in broadcastAllCandidates.value if fset <= p[1]] + ([] if p[0] not in broadcastSignatures.value else [((p[0], fset), 1) for fset in broadcastCandidatesMap.value[p[0]] if fset <= p[1]]))\
             .reduceByKey(lambda x, y: x + y)\
-            .filter(lambda (k, v): v >= MIN_COUNT)\
+            .filter(lambda k_v: k_v[1] >= MIN_COUNT)\
             .collect()
 
             results_ref = [r for r in results if isinstance(r[0], frozenset)]
@@ -575,7 +575,7 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
             .map(lambda p: (p['signature'], set(p.asDict().iteritems())))\
             .flatMap(lambda p: [(fset, 1) for fset in broadcastAllCandidates.value if fset <= p[1]])\
             .reduceByKey(lambda x, y: x + y)\
-            .filter(lambda (k, v): v >= MIN_COUNT)\
+            .filter(lambda k_v: k_v[1] >= MIN_COUNT)\
             .collect()
 
             results_groups = dict()
@@ -586,7 +586,7 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
                 .map(lambda p: (p['signature'], set(p.asDict().iteritems())))\
                 .flatMap(lambda p: [(fset, 1) for fset in broadcastCandidates.value if fset <= p[1]])\
                 .reduceByKey(lambda x, y: x + y)\
-                .filter(lambda (k, v): v >= MIN_COUNT)\
+                .filter(lambda k_v: k_v[1] >= MIN_COUNT)\
                 .collect()
 
         save_results(results_ref, results_groups)
@@ -655,7 +655,7 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
         .rdd\
         .flatMap(lambda p: [(frozenset([(key, p[key])]), 1) for key in broadcastColumns.value] + ([] if p['signature'] not in broadcastSignatures.value else [((p['signature'], frozenset([(key, p[key])])), 1) for key in broadcastColumns.value]))\
         .reduceByKey(lambda x, y: x + y)\
-        .filter(lambda (k, v): v >= MIN_COUNT)\
+        .filter(lambda k_v: k_v[1] >= MIN_COUNT)\
         .collect()
 
         results_ref += [r for r in results if isinstance(r[0], frozenset)]
@@ -666,14 +666,14 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
         .rdd\
         .flatMap(lambda p: [(frozenset([(key, p[key])]), 1) for key in broadcastColumns.value])\
         .reduceByKey(lambda x, y: x + y)\
-        .filter(lambda (k, v): v >= MIN_COUNT)\
+        .filter(lambda k_v: k_v[1] >= MIN_COUNT)\
         .collect()
 
         for group in groups:
             results_groups[group[0]] += group[1].rdd\
             .flatMap(lambda p: [(frozenset([(key, p[key])]), 1) for key in broadcastColumns.value])\
             .reduceByKey(lambda x, y: x + y)\
-            .filter(lambda (k, v): v >= MIN_COUNT)\
+            .filter(lambda k_v: k_v[1] >= MIN_COUNT)\
             .collect()
 
     save_results(results_ref, results_groups)
