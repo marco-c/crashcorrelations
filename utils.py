@@ -44,7 +44,7 @@ def rmdir(path):
 
 
 def write_json(path, obj):
-    with gzip.open(path, 'wb') as f:
+    with gzip.open(path, 'wt') as f:
         json.dump(obj, f)
 
 
