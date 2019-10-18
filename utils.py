@@ -61,6 +61,17 @@ def copytree(src, dst):
             shutil.copy2(s, d)
 
 
+def upload_results(job_name, directory):
+    client = boto3.client('s3', 'us-west-2')
+    transfer = boto3.s3.transfer.S3Transfer(client)
+
+    for root, dirs, files in os.walk(directory):
+        for name in files:
+            full_path = os.path.join(root, name)
+
+            transfer.upload_file(full_path, 'telemetry-public-analysis-2', f'top-signatures-correlations/data/{full_path[7:]}', extra_args={'ContentType': 'application/json', 'ContentEncoding': 'gzip'})
+
+
 def remove_results(job_name):
     bucket = boto3.resource('s3').Bucket('telemetry-public-analysis-2')
 
