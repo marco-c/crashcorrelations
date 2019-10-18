@@ -13,10 +13,11 @@ import time
 from pyspark.sql import SQLContext, Row, functions
 from pyspark.sql.types import StringType, BooleanType
 
-import addons
-import gfx_critical_errors
-import app_notes
-import utils
+from . import addons
+from . import gfx_critical_errors
+from . import app_notes
+from . import utils
+from functools import reduce
 
 
 MIN_COUNT = 5  # 5 for chi-squared test.
@@ -96,13 +97,13 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
         all_results = results_ref + sum(results_groups.values(), [])
 
         for element, count in all_results:
-            if isinstance(element, basestring):
+            if isinstance(element, str):
                 element = frozenset([(element.replace('.', '__DOT__'), True)])
 
             save_count(element, 0, 'reference')
 
         for element, count in results_ref:
-            if isinstance(element, basestring):
+            if isinstance(element, str):
                 element = frozenset([(element.replace('.', '__DOT__'), True)])
 
             save_count(element, count, 'reference')
@@ -111,7 +112,7 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
 
         for group_name in group_names:
             for element, count in results_groups[group_name]:
-                if isinstance(element, basestring):
+                if isinstance(element, str):
                     element = frozenset([(element.replace('.', '__DOT__'), True)])
 
                 save_count(element, count, group_name)
@@ -236,8 +237,8 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
             .filter(lambda k_v: k_v[1] >= MIN_COUNT)\
             .collect()
 
-            addons_ref = [addon for addon in found_addons if isinstance(addon[0], unicode)]
-            addons_signatures = [addon for addon in found_addons if not isinstance(addon[0], unicode)]
+            addons_ref = [addon for addon in found_addons if isinstance(addon[0], str)]
+            addons_signatures = [addon for addon in found_addons if not isinstance(addon[0], str)]
             addons_groups = dict([(signature, [(addon, count) for (s, addon), count in addons_signatures if s == signature]) for signature in signatures])
         else:
             addons_ref = reference.select(functions.explode(reference['addons']).alias('addon'))\
@@ -562,7 +563,7 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
         if signatures is not None:
             broadcastCandidatesMap = sc.broadcast(candidates)
             results = dfReference.rdd\
-            .map(lambda p: (p['signature'], set(p.asDict().iteritems())))\
+            .map(lambda p: (p['signature'], set(p.asDict().items())))\
             .flatMap(lambda p: [(fset, 1) for fset in broadcastAllCandidates.value if fset <= p[1]] + ([] if p[0] not in broadcastSignatures.value else [((p[0], fset), 1) for fset in broadcastCandidatesMap.value[p[0]] if fset <= p[1]]))\
             .reduceByKey(lambda x, y: x + y)\
             .filter(lambda k_v: k_v[1] >= MIN_COUNT)\
@@ -572,7 +573,7 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
             results_groups = dict([(signature, [(r[0][1], r[1]) for r in results if not isinstance(r[0], frozenset) and r[0][0] == signature]) for signature in signatures])
         else:
             results_ref = dfReference.rdd\
-            .map(lambda p: (p['signature'], set(p.asDict().iteritems())))\
+            .map(lambda p: (p['signature'], set(p.asDict().items())))\
             .flatMap(lambda p: [(fset, 1) for fset in broadcastAllCandidates.value if fset <= p[1]])\
             .reduceByKey(lambda x, y: x + y)\
             .filter(lambda k_v: k_v[1] >= MIN_COUNT)\
@@ -583,7 +584,7 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
                 broadcastCandidates = sc.broadcast(candidates[group[0]])
 
                 results_groups[group[0]] = group[1].rdd\
-                .map(lambda p: (p['signature'], set(p.asDict().iteritems())))\
+                .map(lambda p: (p['signature'], set(p.asDict().items())))\
                 .flatMap(lambda p: [(fset, 1) for fset in broadcastCandidates.value if fset <= p[1]])\
                 .reduceByKey(lambda x, y: x + y)\
                 .filter(lambda k_v: k_v[1] >= MIN_COUNT)\
@@ -695,10 +696,10 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
         if elem_val is False and frozenset([(elem_key, True)]) in candidates:
             return True
 
-        if elem_val is None and frozenset([(elem_key, u'1')]) in candidates:
+        if elem_val is None and frozenset([(elem_key, '1')]) in candidates:
             return True
 
-        if elem_val is None and frozenset([(elem_key, u'Active')]) in candidates:
+        if elem_val is None and frozenset([(elem_key, 'Active')]) in candidates:
             return True
 
         # We only care when submitted_from_infobar is true.
@@ -902,7 +903,7 @@ def print_results(results, total_reference, total_groups, reference_name='overal
         return result
 
     def item_to_label(rule):
-        return u' ∧ '.join([key + '="' + str(value) + '"' for key, value in rule.items()]).encode('utf-8')
+        return ' ∧ '.join([key + '="' + str(value) + '"' for key, value in rule.items()]).encode('utf-8')
 
     def print_all(results, group_name):
         for result in results:

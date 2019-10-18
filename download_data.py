@@ -4,8 +4,8 @@
 
 from datetime import timedelta
 
-import utils
-import versions
+from . import utils
+from . import versions
 
 
 def get_top(number, versions, days, product='Firefox'):

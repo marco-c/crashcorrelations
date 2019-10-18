@@ -6,7 +6,7 @@
 import argparse
 import re
 
-import utils
+from . import utils
 
 
 def query_dxr(q):
