@@ -48,19 +48,6 @@ def write_json(path, obj):
         json.dump(obj, f)
 
 
-def copytree(src, dst):
-    if not os.path.exists(dst):
-        os.makedirs(dst)
-
-    for item in os.listdir(src):
-        s = os.path.join(src, item)
-        d = os.path.join(dst, item)
-        if os.path.isdir(s):
-            copytree(s, d)
-        else:
-            shutil.copy2(s, d)
-
-
 def upload_results(job_name, directory):
     client = boto3.client('s3', 'us-west-2')
     transfer = boto3.s3.transfer.S3Transfer(client)
