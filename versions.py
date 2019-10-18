@@ -66,7 +66,7 @@ def get(product, base=False):
     if base:
         res = {}
         for k, v in __versions[product].items():
-            res[k] = __get_major(v)
+            res[k] = __get_major(v) if k != "nightly" else v
         return res
 
     return __versions[product]
