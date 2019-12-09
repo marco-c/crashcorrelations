@@ -9,6 +9,7 @@ from collections import defaultdict
 import scipy.stats
 import math
 import time
+import datetime
 
 from pyspark.sql import SQLContext, Row, functions
 from pyspark.sql.types import StringType, BooleanType
@@ -760,6 +761,8 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
             elif key in all_app_notes:
                 dict_candidate['"' + clean_key + '" in app_notes'] = val
                 del dict_candidate[key]
+            elif isinstance(val, datetime.date):
+                dict_candidate[key] = str(val)
         return dict_candidate
 
     print('Final rules filtering...')
