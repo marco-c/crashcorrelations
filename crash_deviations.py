@@ -24,7 +24,7 @@ MIN_COUNT = 5  # 5 for chi-squared test.
 
 
 def get_telemetry_crashes(sc, versions, days, product='Firefox'):
-    dataset = (spark.read.format("bigquery")
+    dataset = (sc.read.format("bigquery")
         .option("table", "moz-fx-data-derived-datasets.telemetry_derived.socorro_crash_v2")
         .load()
         .where("crash_date >= to_date('{}')".format(utils.get_day(days).strftime('%Y-%m-%d')))
