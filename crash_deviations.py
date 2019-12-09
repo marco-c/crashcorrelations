@@ -24,8 +24,11 @@ MIN_COUNT = 5  # 5 for chi-squared test.
 
 
 def get_telemetry_crashes(sc, versions, days, product='Firefox'):
-    days = utils.get_days(days)
-    dataset = SQLContext(sc).read.load(['s3://telemetry-parquet/socorro_crash/v2/crash_date=' + day.strftime('%Y%m%d') for day in days], 'parquet')
+    dataset = (spark.read.format("bigquery")
+        .option("table", "moz-fx-data-derived-datasets.telemetry_derived.socorro_crash_v2")
+        .load()
+        .where("crash_date >= to_date('{}')".format(utils.get_day(days).strftime('%Y-%m-%d')))
+    )
 
     if product != 'FennecAndroid':
         dataset = dataset.select([c for c in dataset.columns if c not in [
@@ -228,7 +231,7 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
         t = time.time()
 
         if signatures is not None:
-            found_addons = reference.select(['signature'] + [functions.explode(reference['addons']).alias('addon')])\
+            found_addons = reference.select(['signature'] + [functions.explode(reference['addons']['list']).alias('addon')])\
             .rdd\
             .map(lambda v: (v['signature'], get_addon_name(v['addon'])))\
             .filter(lambda s_a: s_a[1] is not None)\
@@ -241,7 +244,7 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
             addons_signatures = [addon for addon in found_addons if not isinstance(addon[0], str)]
             addons_groups = dict([(signature, [(addon, count) for (s, addon), count in addons_signatures if s == signature]) for signature in signatures])
         else:
-            addons_ref = reference.select(functions.explode(reference['addons']).alias('addon'))\
+            addons_ref = reference.select(functions.explode(reference['addons']['list']).alias('addon'))\
             .rdd\
             .map(lambda v_i: (get_addon_name(v_i[0]['addon']), 1))\
             .reduceByKey(lambda x, y: x + y)\
@@ -250,7 +253,7 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
 
             addons_groups = dict()
             for group in groups:
-                addons_groups[group[0]] = group[1].select(functions.explode(group[1]['addons']).alias('addon'))\
+                addons_groups[group[0]] = group[1].select(functions.explode(group[1]['addons']['list']).alias('addon'))\
                 .rdd\
                 .map(lambda v_i: (get_addon_name(v_i[0]['addon']), 1))\
                 .reduceByKey(lambda x, y: x + y)\
@@ -278,7 +281,8 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
             print('Counting modules...')
             t = time.time()
 
-            found_modules = reference.select(['signature', 'uuid'] + [functions.explode(reference['json_dump']['modules']['filename']).alias('module')])\
+            found_modules = reference.select(['signature', 'uuid'] + [functions.explode(reference['json_dump']['modules']['list']).alias('module')])\
+            .selectExpr(['signature', 'uuid', 'module.element.filename AS module'])\
             .dropDuplicates(['uuid', 'module'])\
             .select(['signature', 'module'])\
             .rdd\
@@ -291,7 +295,8 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
             modules_signatures = [module for module in found_modules if isinstance(module[0], Row)]
             modules_groups = dict([(signature, [(module, count) for (s, module), count in modules_signatures if s == signature]) for signature in signatures])
         else:
-            modules_ref = reference.select(functions.explode(reference['json_dump']['modules']['filename']).alias('module'))\
+            modules_ref = reference.select(functions.explode(reference['json_dump']['modules']['list']).alias('module'))\
+            .selectExpr('module.element.filename AS module')\
             .rdd\
             .map(lambda v: (v['module'], 1))\
             .reduceByKey(lambda x, y: x + y)\
@@ -300,7 +305,8 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
 
             modules_groups = dict()
             for group in groups:
-                modules_groups[group[0]] = group[1].select(functions.explode(group[1]['json_dump']['modules']['filename']).alias('module'))\
+                modules_groups[group[0]] = group[1].select(functions.explode(group[1]['json_dump']['modules']['list'])).alias('module')\
+                .selectExpr('module.element.filename AS module')\
                 .rdd\
                 .map(lambda v: (v['module'], 1))\
                 .reduceByKey(lambda x, y: x + y)\
@@ -397,7 +403,7 @@ def find_deviations(sc, reference, groups=None, signatures=None, min_support_dif
             df = df.select(['*'] + [create_get_addon_name_udf(addon)(df['addons']).alias(addon.replace('.', '__DOT__')) for addon in all_addons] + [create_get_addon_version_udf(addon)(df['addons']).alias(addon.replace('.', '__DOT__') + '-version') for addon in all_addons])
 
         if 'json_dump' in df.columns:
-            df = df.select(['*'] + [functions.array_contains(df['json_dump']['modules']['filename'], module_name).alias(module_id) for module_id, module_name in module_ids.items()])
+            df = df.select(['*'] + [functions.array_contains(df['json_dump']['modules']['list']['element']['filename'], module_name).alias(module_id) for module_id, module_name in module_ids.items()])
 
         if 'plugin_version' in df.columns:
             df = df.withColumn('plugin', df['plugin_version'].isNotNull())
