@@ -22,7 +22,8 @@ def get_with_retries(url, params=None, headers=None):
     retries = Retry(total=16, backoff_factor=1, status_forcelist=[429])
 
     s = requests.Session()
-    s.mount('https://crash-stats.mozilla.com', HTTPAdapter(max_retries=retries))
+    http_adapter = HTTPAdapter(max_retries=retries)
+    s.mount("https://", http_adapter)
 
     return s.get(url, params=params, headers=headers)
 
