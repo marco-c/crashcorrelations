@@ -5,21 +5,16 @@
 
 import argparse
 import re
+from functools import lru_cache
 
 from . import utils
 
 
-errors = None
 def get_critical_errors():
-    global errors
+    results = utils.query_searchfox('gfxCriticalError(') + utils.query_searchfox('gfxCriticalNote <<') + utils.query_searchfox('gfxCriticalErrorOnce(')
 
-    if errors is None:
-        results = utils.query_searchfox('gfxCriticalError(') + utils.query_searchfox('gfxCriticalNote <<') + utils.query_searchfox('gfxCriticalErrorOnce(')
+    matches = [re.search(r'"(.*?)"', line['line']) for result in results for line in result['lines']]
 
-        matches = [re.search(r'"(.*?)"', line['line']) for result in results for line in result['lines']]
+    errors = [match.group(1) for match in matches if match is not None]
 
-        errors = [match.group(1) for match in matches if match is not None]
-
-        errors = set([error for error in errors if error != ', '])
-
-    return errors
+    return set(error for error in errors if error != ', ')
