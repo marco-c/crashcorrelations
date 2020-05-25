@@ -9,27 +9,12 @@ import re
 from . import utils
 
 
-def query_dxr(q):
-    r = utils.get_with_retries('https://dxr.mozilla.org/mozilla-central/search', params={
-        'q': q,
-        'limit': 1000
-    }, headers={
-        'Accept': 'application/json'
-    })
-
-    if r.status_code != 200:
-        print(r.text)
-        raise Exception(r)
-
-    return r.json()
-
-
 app_notes = None
 def get_app_notes():
     global app_notes
 
     if app_notes is None:
-        results = query_dxr('ScopedGfxFeatureReporter ')['results']
+        results = utils.query_searchfox('ScopedGfxFeatureReporter ')
 
         matches = [re.search(r'"(.*?)"', line['line']) for result in results for line in result['lines']]
 

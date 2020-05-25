@@ -9,27 +9,12 @@ import re
 from . import utils
 
 
-def query_dxr(q):
-    r = utils.get_with_retries('https://dxr.mozilla.org/mozilla-central/search', params={
-        'q': q,
-        'limit': 1000
-    }, headers={
-        'Accept': 'application/json'
-    })
-
-    if r.status_code != 200:
-        print(r.text)
-        raise Exception(r)
-
-    return r.json()
-
-
 errors = None
 def get_critical_errors():
     global errors
 
     if errors is None:
-        results = query_dxr('gfxCriticalError(')['results'] + query_dxr('gfxCriticalNote <<')['results'] + query_dxr('gfxCriticalErrorOnce(')['results']
+        results = utils.query_searchfox('gfxCriticalError(') + utils.query_searchfox('gfxCriticalNote <<') + utils.query_searchfox('gfxCriticalErrorOnce(')
 
         matches = [re.search(r'"(.*?)"', line['line']) for result in results for line in result['lines']]
 
